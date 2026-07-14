@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum Role {
+  ADMIN
+  BOOKKEEPER
+}
+
+enum JournalSourceType {
+  MANUAL
+  PURCHASE
+  SALE_REVENUE
+  SALE_COGS
+  EXPENSE
+  PAYMENT
+  ADJUSTMENT
+}
+
+enum ExpenseCategory {
+  COGS
+  OPERATIONAL
+  FIXED
+  SALES
+  OTHER
+}
+
+enum PaymentType {
+  CUSTOMER_RECEIPT
+  SUPPLIER_PAYMENT
+}
+
+model User {
+  id             String         @id @default(cuid())
+  name           String
+  email          String         @unique
+  passwordHash   String
+  role           Role           @default(BOOKKEEPER)
+  isActive       Boolean        @default(true)
+  failedLoginCount Int          @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime       @default(now())
+  journalEntries JournalEntry[]
+  auditLogs      AuditLog[]
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  detail    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model PeriodLock {
+  id            String   @id @default(cuid())
+  lockedThrough DateTime
+  createdById   String
+  createdAt     DateTime @default(now())
+}
+
+model Account {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  name            String
+  type            AccountType
+  normalBalance   NormalBalance
+  expenseCategory ExpenseCategory?
+  isLongTerm      Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+
+  journalLines       JournalLine[]
+  purchasesAsPayment Purchase[]    @relation("PurchasePaymentAccount")
+  salesAsPayment     Sale[]        @relation("SalePaymentAccount")
+  payments           Payment[]     @relation("PaymentAccount")
+
+  @@index([type])
+}
+
+model JournalEntry {
+  id          String            @id @default(cuid())
+  date        DateTime
+  memo        String?
+  reference   String?
+  sourceType  JournalSourceType @default(MANUAL)
+  createdById String
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+
+  lines       JournalLine[]
+  purchase    Purchase?         @relation("PurchaseJournal")
+  saleRevenue Sale?             @relation("SaleRevenueJournal")
+  saleCOGS    Sale?             @relation("SaleCOGSJournal")
+  payment     Payment?          @relation("PaymentJournal")
+
+  @@index([date])
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(18, 2)
+  credit         Decimal      @default(0) @db.Decimal(18, 2)
+  description    String?
+
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  sku            String   @unique
+  name           String
+  description    String?
+  unitCost       Decimal  @default(0) @db.Decimal(18, 2)
+  unitPrice      Decimal  @default(0) @db.Decimal(18, 2)
+  quantityOnHand Decimal  @default(0) @db.Decimal(18, 3)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  purchaseLines PurchaseLine[]
+  saleLines     SaleLine[]
+}
+
+model Supplier {
+  id          String  @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  isActive    Boolean @default(true)
+
+  purchases Purchase[]
+  payments  Payment[]
+}
+
+model Customer {
+  id          String  @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  isActive    Boolean @default(true)
+
+  sales    Sale[]
+  payments Payment[]
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  date           DateTime
+  type           PaymentType
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  supplierId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  accountId      String
+  account        Account      @relation("PaymentAccount", fields: [accountId], references: [id])
+  amount         Decimal      @db.Decimal(18, 2)
+  reference      String?
+  memo           String?
+  journalEntryId String       @unique
+  journalEntry   JournalEntry @relation("PaymentJournal", fields: [journalEntryId], references: [id])
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([date])
+}
+
+model Purchase {
+  id               String   @id @default(cuid())
+  date             DateTime
+  supplierId       String
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+  reference        String?
+  paymentAccountId String
+  paymentAccount   Account  @relation("PurchasePaymentAccount", fields: [paymentAccountId], references: [id])
+  totalAmount      Decimal  @db.Decimal(18, 2)
+  journalEntryId   String       @unique
+  journalEntry     JournalEntry @relation("PurchaseJournal", fields: [journalEntryId], references: [id])
+  createdById      String
+  createdAt        DateTime @default(now())
+
+  lines PurchaseLine[]
+
+  @@index([supplierId])
+  @@index([date])
+}
+
+model PurchaseLine {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Decimal  @db.Decimal(18, 3)
+  unitCost   Decimal  @db.Decimal(18, 2)
+  lineTotal  Decimal  @db.Decimal(18, 2)
+
+  @@index([productId])
+}
+
+model Sale {
+  id                    String       @id @default(cuid())
+  date                  DateTime
+  customerId            String
+  customer              Customer     @relation(fields: [customerId], references: [id])
+  reference             String?
+  paymentAccountId      String
+  paymentAccount        Account      @relation("SalePaymentAccount", fields: [paymentAccountId], references: [id])
+  totalAmount           Decimal      @db.Decimal(18, 2)
+  totalCOGS             Decimal      @db.Decimal(18, 2)
+  revenueJournalEntryId String       @unique
+  revenueJournalEntry   JournalEntry @relation("SaleRevenueJournal", fields: [revenueJournalEntryId], references: [id])
+  cogsJournalEntryId    String       @unique
+  cogsJournalEntry      JournalEntry @relation("SaleCOGSJournal", fields: [cogsJournalEntryId], references: [id])
+  createdById           String
+  createdAt             DateTime     @default(now())
+
+  lines SaleLine[]
+
+  @@index([customerId])
+  @@index([date])
+}
+
+model SaleLine {
+  id         String  @id @default(cuid())
+  saleId     String
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Decimal @db.Decimal(18, 3)
+  unitPrice  Decimal @db.Decimal(18, 2)
+  unitCost   Decimal @db.Decimal(18, 2)
+  lineTotal  Decimal @db.Decimal(18, 2)
+  lineCOGS   Decimal @db.Decimal(18, 2)
+
+  @@index([productId])
+}
