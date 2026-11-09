@@ -10,7 +10,10 @@ const ADJUSTMENT_ACCOUNT_CODE = "6890";
 export async function listProducts() {
   return prisma.product.findMany({
     orderBy: [{ category: "asc" }, { sku: "asc" }],
-    include: { components: { include: { component: true } } },
+    include: {
+      components: { include: { component: true } },
+      usedInBikes: { select: { id: true } },
+    },
   });
 }
 

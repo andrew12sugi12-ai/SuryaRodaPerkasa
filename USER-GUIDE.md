@@ -97,8 +97,17 @@ need a **new expense category**, etc. See [Section 4](#4-chart-of-accounts--the-
 for the exact format.
 
 ### b) Products — `Inventory → Products` (/products)
-Click **New product**. Give each product an **SKU** (code), **name**, selling price, and
-starting quantity/cost if you already have stock. The average cost updates as you buy.
+Click **New product**. Give each product an **SKU** (code), **name**, a **Category**
+(**Spare Part** or **Bicycle**), selling price, and starting quantity/cost if you already have
+stock. The average cost updates as you buy. The product list is grouped into **Bicycles** and
+**Spare Parts**. Bike parts (e.g. part A and B) are **not shown as Spare Parts** — they appear
+nested under their bike, where you can still see and adjust their stock. There are now **two
+separate inventory reports** (Reports menu): **Sparepart Inventory** and **Bicycle Inventory** —
+bike parts only ever appear in the Bicycle report. In **Analytics**, *Product Movement* is also
+split into a Sparepart table and a Bicycle table.
+
+> **Bicycles built from parts** — a finished bike can be assembled from component parts. See
+> the dedicated section below.
 
 ### c) Customers — `Contacts → Customers` (/customers)
 Click **New customer**. Fields that matter:
@@ -118,6 +127,33 @@ sales get linked to a salesman so the **Performance report** can measure attainm
 > **Deactivate, don't delete.** Once a customer, supplier, product, or account has any
 > history, you cannot delete it (that would break the books). Instead edit it and set it to
 > **Inactive** — it disappears from dropdowns but its history stays intact.
+
+### f) Bicycles built from parts (bill of materials)
+A finished bicycle is often assembled from **component parts** (call them A and B). The system
+lets you stock the parts separately but **sell the bike as one product**, with cost worked out
+from its parts.
+
+**Step 1 — create the parts (A, B)** as products with **Category = Bicycle**. Give them stock
+and cost (or buy them via Purchases). These parts live under Bicycle inventory and are bought
+through **Purchases** like any stock item.
+
+**Step 2 — create the finished bike** as a product with **Category = Bicycle**. A
+**Components (bill of materials)** section appears — click **Add component**, choose Part A
+(quantity 1), add Part B (quantity 1), and so on. Save.
+
+**What this does:**
+- The bike itself **holds no stock** — it is "buildable" as long as its parts are in stock.
+  The product list shows how many bikes you *can build* from current parts.
+- **When you sell the bike**, one of each part leaves stock automatically, and the bike's
+  **cost = the sum of its parts' costs**. So **profit = bike price − (cost of A + cost of B)**.
+- **Parts A and B are never sold on their own** — they don't appear in the sales screen, only
+  inside bikes. (They are still bought via Purchases.)
+- **Bikes are never purchased** — you build them from parts, so they don't appear in the
+  Purchases screen.
+- Editing, deleting, or returning a bike sale puts the parts back into stock correctly.
+
+> **To restock bikes:** buy more of parts A and B via **Purchases**. The bike's "buildable"
+> number goes up automatically.
 
 ---
 
@@ -372,6 +408,17 @@ their card.
 Chart of Accounts → New account. Follow the code ranges and normal-balance rule in
 [Section 4](#4-chart-of-accounts--the-proper-format). Bank → code in 10xx, Type ASSET, DEBIT.
 Expense → code in 6xxx, Type EXPENSE, DEBIT, and pick an expense category.
+
+**"How do I sell a bicycle that's made of two parts (A and B)?"**
+Create A and B as products (Category = Bicycle) and stock them. Create the bike (Category =
+Bicycle) and, in its **Components** section, add A and B. Then sell the bike on an invoice like
+any product — A and B leave stock automatically, and profit = bike price − (cost A + cost B).
+See section 3f.
+
+**"Why can't I find my bike part on the sales screen?"**
+Because parts used inside a bike are never sold on their own — they only appear inside the
+finished bike. If you need to sell a part directly, make it a **Spare Part** instead of a bike
+component.
 
 **"I can't delete a customer/product/account."**
 That's on purpose — it has history. Edit it and set **Inactive** instead.

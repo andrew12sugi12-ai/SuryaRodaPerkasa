@@ -71,7 +71,7 @@ export default async function AnalyticsPage({
           sub={`${t.margin}: ${data.totals.marginPct.toFixed(1)}%`}
         />
         <StatCard label={t.invoices} value={String(data.totals.invoices)} />
-        <StatCard label={t.deadStockItems} value={String(data.totals.deadStock)} />
+        <StatCard label={t.deadStockItems} value={String(data.totals.deadStockCount)} />
       </div>
 
       {/* Salesman performance */}
@@ -160,53 +160,100 @@ export default async function AnalyticsPage({
         </div>
       </section>
 
-      {/* Product movement */}
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold tracking-tight">{t.productMovement}</h2>
-        <p className="text-sm text-muted-foreground">{t.productMovementHelp}</p>
-        <div className="rounded-xl border bg-card p-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t.product}</TableHead>
-                <TableHead className="text-right">{t.unitsSold}</TableHead>
-                <TableHead className="text-right">{t.onHand}</TableHead>
-                <TableHead className="text-right">{t.daysOfStock}</TableHead>
-                <TableHead className="text-right">{t.revenue}</TableHead>
-                <TableHead className="text-right">{t.margin}</TableHead>
-                <TableHead className="text-right">{t.movement}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.productMovement.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <span className="font-medium">{p.name}</span>{" "}
-                    <span className="text-xs text-muted-foreground">{p.sku}</span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{p.unitsSold}</TableCell>
-                  <TableCell className="text-right tabular-nums">{p.onHand}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {p.daysOfStock === null ? "—" : Math.round(p.daysOfStock)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatIDR(p.revenue)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{p.marginPct.toFixed(1)}%</TableCell>
-                  <TableCell className={`text-right font-medium ${CATEGORY_STYLES[p.category]}`}>
-                    {catLabel(p.category)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {data.productMovement.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    {t.noProducts}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
+      {/* Product movement — Sparepart */}
+      <MovementSection
+        title={t.productMovementSparepart}
+        help={t.productMovementHelp}
+        rows={data.sparepartMovement}
+        onHandLabel={t.onHand}
+        t={t}
+        catLabel={catLabel}
+      />
+
+      {/* Product movement — Bicycle */}
+      <MovementSection
+        title={t.productMovementBicycle}
+        help={t.productMovementBicycleHelp}
+        rows={data.bicycleMovement}
+        onHandLabel={t.buildable}
+        t={t}
+        catLabel={catLabel}
+      />
     </div>
+  );
+}
+
+function MovementSection({
+  title,
+  help,
+  rows,
+  onHandLabel,
+  t,
+  catLabel,
+}: {
+  title: string;
+  help: string;
+  rows: {
+    id: string;
+    sku: string;
+    name: string;
+    unitsSold: number;
+    onHand: number;
+    daysOfStock: number | null;
+    revenue: number;
+    marginPct: number;
+    category: string;
+  }[];
+  onHandLabel: string;
+  t: Record<string, string>;
+  catLabel: (c: string) => string;
+}) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <p className="text-sm text-muted-foreground">{help}</p>
+      <div className="rounded-xl border bg-card p-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t.product}</TableHead>
+              <TableHead className="text-right">{t.unitsSold}</TableHead>
+              <TableHead className="text-right">{onHandLabel}</TableHead>
+              <TableHead className="text-right">{t.daysOfStock}</TableHead>
+              <TableHead className="text-right">{t.revenue}</TableHead>
+              <TableHead className="text-right">{t.margin}</TableHead>
+              <TableHead className="text-right">{t.movement}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell>
+                  <span className="font-medium">{p.name}</span>{" "}
+                  <span className="text-xs text-muted-foreground">{p.sku}</span>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{p.unitsSold}</TableCell>
+                <TableCell className="text-right tabular-nums">{p.onHand}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {p.daysOfStock === null ? "—" : Math.round(p.daysOfStock)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{formatIDR(p.revenue)}</TableCell>
+                <TableCell className="text-right tabular-nums">{p.marginPct.toFixed(1)}%</TableCell>
+                <TableCell className={`text-right font-medium ${CATEGORY_STYLES[p.category]}`}>
+                  {catLabel(p.category)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  {t.noProducts}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   );
 }

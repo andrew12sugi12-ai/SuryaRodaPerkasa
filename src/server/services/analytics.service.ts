@@ -31,10 +31,11 @@ export type ProductMovement = {
   cogs: number;
   grossProfit: number;
   marginPct: number;
-  onHand: number;
+  onHand: number; // for a bike this is "buildable" from parts
   daysOfStock: number | null; // null = infinite (nothing sold)
   category: "FAST" | "NORMAL" | "SLOW" | "DEAD";
 };
+
 
 const dayMs = 86_400_000;
 const pct = (profit: number, revenue: number) => (revenue > 0 ? (profit / revenue) * 100 : 0);
@@ -75,9 +76,26 @@ export async function getAnalytics(startDate: Date, endDate: Date) {
       where: { sale: where },
       _sum: { quantity: true, lineTotal: true, lineCOGS: true },
     }),
+    // All active products with the relationships needed to tell spareparts,
+    // finished bikes, and bike components apart and to roll component usage up
+    // from bike sales.
     prisma.product.findMany({
       where: { isActive: true },
-      select: { id: true, sku: true, name: true, quantityOnHand: true },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        quantityOnHand: true,
+        unitCost: true,
+        category: true,
+        components: {
+          select: {
+            quantity: true,
+            component: { select: { id: true, quantityOnHand: true, unitCost: true } },
+          },
+        },
+        usedInBikes: { select: { bikeId: true, quantity: true } },
+      },
     }),
     prisma.customer.findMany({ select: { id: true, name: true } }),
   ]);
@@ -147,20 +165,30 @@ export async function getAnalytics(startDate: Date, endDate: Date) {
       cogs: Number(g._sum.lineCOGS ?? 0),
     });
   }
-  const productMovement: ProductMovement[] = products
+  // Classify every active product.
+  const bikes = products.filter((p) => p.components.length > 0);
+  const spareparts = products.filter(
+    (p) => p.components.length === 0 && p.usedInBikes.length === 0
+  );
+
+  const movementCategory = (
+    unitsSold: number,
+    daysOfStock: number | null
+  ): ProductMovement["category"] => {
+    if (unitsSold <= 0) return "DEAD";
+    if (daysOfStock !== null && daysOfStock <= 30) return "FAST";
+    if (daysOfStock !== null && daysOfStock > 90) return "SLOW";
+    return "NORMAL";
+  };
+
+  // --- Sparepart movement (standalone stock-carrying items) ---
+  const sparepartMovement: ProductMovement[] = spareparts
     .map((p) => {
       const sold = soldByProduct.get(p.id) ?? { units: 0, revenue: 0, cogs: 0 };
       const onHand = Number(p.quantityOnHand);
       const grossProfit = sold.revenue - sold.cogs;
       const dailyRate = sold.units / periodDays;
       const daysOfStock = dailyRate > 0 ? onHand / dailyRate : null;
-
-      let category: ProductMovement["category"];
-      if (sold.units <= 0) category = "DEAD";
-      else if (daysOfStock !== null && daysOfStock <= 30) category = "FAST";
-      else if (daysOfStock !== null && daysOfStock > 90) category = "SLOW";
-      else category = "NORMAL";
-
       return {
         id: p.id,
         sku: p.sku,
@@ -172,25 +200,63 @@ export async function getAnalytics(startDate: Date, endDate: Date) {
         marginPct: pct(grossProfit, sold.revenue),
         onHand,
         daysOfStock,
-        category,
+        category: movementCategory(sold.units, daysOfStock),
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+
+  // --- Bicycle movement (finished bikes — "on hand" is buildable from parts) ---
+  const bicycleMovement: ProductMovement[] = bikes
+    .map((p) => {
+      const sold = soldByProduct.get(p.id) ?? { units: 0, revenue: 0, cogs: 0 };
+      const buildable = p.components.length
+        ? Math.floor(
+            Math.min(
+              ...p.components.map((c) =>
+                Number(c.quantity) > 0
+                  ? Number(c.component.quantityOnHand) / Number(c.quantity)
+                  : 0
+              )
+            )
+          )
+        : 0;
+      const grossProfit = sold.revenue - sold.cogs;
+      const dailyRate = sold.units / periodDays;
+      const daysOfStock = dailyRate > 0 ? buildable / dailyRate : null;
+      return {
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        unitsSold: sold.units,
+        revenue: sold.revenue,
+        cogs: sold.cogs,
+        grossProfit,
+        marginPct: pct(grossProfit, sold.revenue),
+        onHand: buildable,
+        daysOfStock,
+        category: movementCategory(sold.units, daysOfStock),
       };
     })
     .sort((a, b) => b.revenue - a.revenue);
 
   const totalRevenue = topCustomers.reduce((s, c) => s + c.revenue, 0);
   const totalProfit = topCustomers.reduce((s, c) => s + c.grossProfit, 0);
+  const deadStockCount =
+    sparepartMovement.filter((p) => p.category === "DEAD").length +
+    bicycleMovement.filter((p) => p.category === "DEAD").length;
 
   return {
     periodDays,
     salesmanPerformance,
     topCustomers,
-    productMovement,
+    sparepartMovement,
+    bicycleMovement,
     totals: {
       revenue: totalRevenue,
       grossProfit: totalProfit,
       marginPct: pct(totalProfit, totalRevenue),
       invoices: topCustomers.reduce((s, c) => s + c.invoices, 0),
-      deadStock: productMovement.filter((p) => p.category === "DEAD").length,
+      deadStockCount,
     },
   };
 }

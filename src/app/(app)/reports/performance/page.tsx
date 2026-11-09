@@ -79,7 +79,7 @@ export default async function PerformanceReportPage({
           sub={`${t.margin}: ${data.totals.marginPct.toFixed(1)}%`}
         />
         <StatCard label={t.invoices} value={String(data.totals.invoices)} />
-        <StatCard label={t.deadStockItems} value={String(data.totals.deadStock)} />
+        <StatCard label={t.deadStockItems} value={String(data.totals.deadStockCount)} />
       </div>
 
       {/* Salesman sales */}
