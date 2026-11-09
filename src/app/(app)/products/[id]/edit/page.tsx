@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getDict } from "@/lib/i18n/server";
-import { getProduct } from "@/server/services/products.service";
+import { getProduct, listComponentCandidates } from "@/server/services/products.service";
 import { ProductForm } from "@/components/products/product-form";
 import { formatIDR } from "@/lib/currency";
 
@@ -13,6 +13,7 @@ export default async function EditProductPage({
   const { id } = await params;
   const product = await getProduct(id);
   if (!product) notFound();
+  const candidates = await listComponentCandidates(product.id);
 
   return (
     <div className="space-y-6">
@@ -24,12 +25,18 @@ export default async function EditProductPage({
       </p>
       <ProductForm
         productId={product.id}
+        componentOptions={candidates.map((c) => ({ id: c.id, label: `${c.sku} — ${c.name}` }))}
         defaultValues={{
           sku: product.sku,
           name: product.name,
           description: product.description ?? "",
+          category: product.category,
           unitPrice: Number(product.unitPrice),
           isActive: product.isActive,
+          components: product.components.map((pc) => ({
+            componentId: pc.componentId,
+            quantity: Number(pc.quantity),
+          })),
         }}
       />
     </div>

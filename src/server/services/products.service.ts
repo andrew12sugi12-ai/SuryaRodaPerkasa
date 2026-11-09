@@ -8,23 +8,64 @@ const OWNERS_EQUITY_ACCOUNT_CODE = "3000";
 const ADJUSTMENT_ACCOUNT_CODE = "6890";
 
 export async function listProducts() {
-  return prisma.product.findMany({ orderBy: { sku: "asc" } });
+  return prisma.product.findMany({
+    orderBy: [{ category: "asc" }, { sku: "asc" }],
+    include: { components: { include: { component: true } } },
+  });
 }
 
 export async function listActiveProducts() {
   return prisma.product.findMany({
     where: { isActive: true },
-    orderBy: { sku: "asc" },
+    orderBy: [{ category: "asc" }, { sku: "asc" }],
+  });
+}
+
+// For the SALES picker: everything that can be put on an invoice — spare parts
+// and finished bikes — but NOT bike components (they're never sold on their own).
+export async function listSellableProducts() {
+  return prisma.product.findMany({
+    where: { isActive: true, usedInBikes: { none: {} } },
+    orderBy: [{ category: "asc" }, { sku: "asc" }],
+    include: { components: { include: { component: true } } },
+  });
+}
+
+// For the PURCHASE picker: everything that carries its own stock — spare parts
+// and bike components — but NOT bikes (bikes are assembled, never bought).
+export async function listStockableProducts() {
+  return prisma.product.findMany({
+    where: { isActive: true, components: { none: {} } },
+    orderBy: [{ category: "asc" }, { sku: "asc" }],
+  });
+}
+
+// Candidate parts that can be added to a bike's bill of materials: any active
+// product that is not itself a bike (no nesting), excluding the bike being edited.
+export async function listComponentCandidates(excludeProductId?: string) {
+  return prisma.product.findMany({
+    where: {
+      isActive: true,
+      components: { none: {} },
+      ...(excludeProductId ? { id: { not: excludeProductId } } : {}),
+    },
+    orderBy: [{ category: "asc" }, { sku: "asc" }],
   });
 }
 
 export async function getProduct(id: string) {
-  return prisma.product.findUnique({ where: { id } });
+  return prisma.product.findUnique({
+    where: { id },
+    include: { components: { include: { component: true } } },
+  });
 }
 
 export async function createProduct(input: ProductInput, createdById: string) {
-  const openingQty = input.openingQuantity ?? 0;
-  const openingCost = input.openingUnitCost ?? 0;
+  const components = input.components ?? [];
+  const isBike = components.length > 0;
+  // A bike carries no stock of its own — its value lives in its components.
+  const openingQty = isBike ? 0 : input.openingQuantity ?? 0;
+  const openingCost = isBike ? 0 : input.openingUnitCost ?? 0;
   const openingValue = openingQty * openingCost;
 
   return prisma.$transaction(async (tx) => {
@@ -33,10 +74,17 @@ export async function createProduct(input: ProductInput, createdById: string) {
         sku: input.sku,
         name: input.name,
         description: input.description,
+        category: input.category,
         unitPrice: input.unitPrice ?? 0,
         isActive: input.isActive,
         quantityOnHand: new Prisma.Decimal(openingQty),
         unitCost: new Prisma.Decimal(openingCost),
+        components: {
+          create: components.map((c) => ({
+            componentId: c.componentId,
+            quantity: new Prisma.Decimal(c.quantity),
+          })),
+        },
       },
     });
 
@@ -71,15 +119,27 @@ export async function createProduct(input: ProductInput, createdById: string) {
 }
 
 export async function updateProduct(id: string, input: ProductInput) {
-  return prisma.product.update({
-    where: { id },
-    data: {
-      sku: input.sku,
-      name: input.name,
-      description: input.description,
-      unitPrice: input.unitPrice ?? 0,
-      isActive: input.isActive,
-    },
+  const components = input.components ?? [];
+  return prisma.$transaction(async (tx) => {
+    // Replace the bill of materials wholesale (simplest correct approach).
+    await tx.productComponent.deleteMany({ where: { bikeId: id } });
+    return tx.product.update({
+      where: { id },
+      data: {
+        sku: input.sku,
+        name: input.name,
+        description: input.description,
+        category: input.category,
+        unitPrice: input.unitPrice ?? 0,
+        isActive: input.isActive,
+        components: {
+          create: components.map((c) => ({
+            componentId: c.componentId,
+            quantity: new Prisma.Decimal(c.quantity),
+          })),
+        },
+      },
+    });
   });
 }
 

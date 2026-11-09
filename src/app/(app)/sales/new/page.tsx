@@ -1,7 +1,7 @@
 import { listActiveCustomers } from "@/server/services/customers.service";
 import { getDict } from "@/lib/i18n/server";
 import { listSettlementAccounts } from "@/server/services/accounts.service";
-import { listActiveProducts } from "@/server/services/products.service";
+import { listSellableProducts } from "@/server/services/products.service";
 import { getCreditSnapshotMap } from "@/server/services/credit.service";
 import { listActiveSalesmen } from "@/server/services/salesmen.service";
 import { SaleForm } from "@/components/sales/sale-form";
@@ -11,7 +11,7 @@ export default async function NewSalePage() {
   const [customers, accounts, products, creditMap, salesmen] = await Promise.all([
     listActiveCustomers(),
     listSettlementAccounts("sale"),
-    listActiveProducts(),
+    listSellableProducts(),
     getCreditSnapshotMap(),
     listActiveSalesmen(),
   ]);

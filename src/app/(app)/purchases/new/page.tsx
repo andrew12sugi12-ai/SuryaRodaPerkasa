@@ -1,7 +1,7 @@
 import { listActiveSuppliers } from "@/server/services/suppliers.service";
 import { getDict } from "@/lib/i18n/server";
 import { listSettlementAccounts } from "@/server/services/accounts.service";
-import { listActiveProducts } from "@/server/services/products.service";
+import { listStockableProducts } from "@/server/services/products.service";
 import { PurchaseForm } from "@/components/purchases/purchase-form";
 
 export default async function NewPurchasePage() {
@@ -9,7 +9,7 @@ export default async function NewPurchasePage() {
   const [suppliers, accounts, products] = await Promise.all([
     listActiveSuppliers(),
     listSettlementAccounts("purchase"),
-    listActiveProducts(),
+    listStockableProducts(),
   ]);
 
   return (

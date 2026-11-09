@@ -3,7 +3,7 @@ import { getDict } from "@/lib/i18n/server";
 import { getPurchase } from "@/server/services/purchases.service";
 import { listActiveSuppliers } from "@/server/services/suppliers.service";
 import { listSettlementAccounts } from "@/server/services/accounts.service";
-import { listActiveProducts } from "@/server/services/products.service";
+import { listStockableProducts } from "@/server/services/products.service";
 import { PurchaseForm } from "@/components/purchases/purchase-form";
 
 export default async function EditPurchasePage({
@@ -17,7 +17,7 @@ export default async function EditPurchasePage({
     getPurchase(id),
     listActiveSuppliers(),
     listSettlementAccounts("purchase"),
-    listActiveProducts(),
+    listStockableProducts(),
   ]);
   if (!purchase) notFound();
 

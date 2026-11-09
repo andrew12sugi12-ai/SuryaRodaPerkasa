@@ -65,6 +65,11 @@ enum GiroStatus {
   BOUNCED
 }
 
+enum ProductCategory {
+  SPAREPART
+  BICYCLE
+}
+
 model User {
   id             String         @id @default(cuid())
   name           String
@@ -154,19 +159,38 @@ model JournalLine {
 }
 
 model Product {
-  id             String   @id @default(cuid())
-  sku            String   @unique
+  id             String          @id @default(cuid())
+  sku            String          @unique
   name           String
   description    String?
-  unitCost       Decimal  @default(0) @db.Decimal(18, 2)
-  unitPrice      Decimal  @default(0) @db.Decimal(18, 2)
-  quantityOnHand Decimal  @default(0) @db.Decimal(18, 3)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+  category       ProductCategory @default(SPAREPART)
+  unitCost       Decimal         @default(0) @db.Decimal(18, 2)
+  unitPrice      Decimal         @default(0) @db.Decimal(18, 2)
+  quantityOnHand Decimal         @default(0) @db.Decimal(18, 3)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
 
   purchaseLines    PurchaseLine[]
   saleLines        SaleLine[]
   salesReturnLines SalesReturnLine[]
+
+  // Bill of materials: a finished bike is assembled from component products.
+  components  ProductComponent[] @relation("BikeComponents")   // if this is a bike: its parts
+  usedInBikes ProductComponent[] @relation("ComponentOfBikes") // if this is a part: bikes using it
+}
+
+// One line of a bike's bill of materials: "this bike needs `quantity` of this component".
+model ProductComponent {
+  id          String  @id @default(cuid())
+  bikeId      String
+  componentId String
+  quantity    Decimal @default(1) @db.Decimal(18, 3)
+
+  bike      Product @relation("BikeComponents", fields: [bikeId], references: [id], onDelete: Cascade)
+  component Product @relation("ComponentOfBikes", fields: [componentId], references: [id])
+
+  @@unique([bikeId, componentId])
+  @@index([componentId])
 }
 
 model Supplier {

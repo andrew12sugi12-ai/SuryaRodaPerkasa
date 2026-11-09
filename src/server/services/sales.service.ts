@@ -20,6 +20,32 @@ export type RecordSaleInput = {
 
 type Tx = Prisma.TransactionClient;
 
+// Restore stock when a sale is reversed. For an assembled bike this returns each
+// component to stock (by its per-bike quantity); for a normal product it returns
+// the product's own stock. Uses the bike's CURRENT bill of materials.
+export async function restoreStockForLineTx(
+  tx: Tx,
+  productId: string,
+  quantity: Prisma.Decimal
+) {
+  const bom = await tx.productComponent.findMany({ where: { bikeId: productId } });
+  if (bom.length > 0) {
+    for (const part of bom) {
+      await tx.product.update({
+        where: { id: part.componentId },
+        data: {
+          quantityOnHand: { increment: quantity.times(new Prisma.Decimal(part.quantity)) },
+        },
+      });
+    }
+  } else {
+    await tx.product.update({
+      where: { id: productId },
+      data: { quantityOnHand: { increment: quantity } },
+    });
+  }
+}
+
 // Restores stock for a sale's lines and removes the sale + its two journal
 // entries — the reversible half of an edit, usable inside a shared transaction.
 export async function reverseSaleTx(tx: Tx, saleId: string) {
@@ -28,10 +54,7 @@ export async function reverseSaleTx(tx: Tx, saleId: string) {
     include: { lines: true },
   });
   for (const line of sale.lines) {
-    await tx.product.update({
-      where: { id: line.productId },
-      data: { quantityOnHand: { increment: line.quantity } },
-    });
+    await restoreStockForLineTx(tx, line.productId, new Prisma.Decimal(line.quantity));
   }
   await tx.sale.delete({ where: { id: saleId } });
   await tx.journalEntry.delete({ where: { id: sale.revenueJournalEntryId } });
@@ -58,40 +81,77 @@ export async function recordSaleTx(tx: Tx, input: RecordSaleInput) {
   }[] = [];
 
   for (const line of input.lines) {
-    const [product] = await tx.$queryRaw<
-      { id: string; name: string; quantityOnHand: Prisma.Decimal; unitCost: Prisma.Decimal }[]
-    >(Prisma.sql`SELECT * FROM "Product" WHERE id = ${line.productId} FOR UPDATE`);
-
-    if (!product) {
-      throw new Error(`Product ${line.productId} not found`);
-    }
-
     const requestedQty = new Prisma.Decimal(line.quantity);
-    const availableQty = new Prisma.Decimal(product.quantityOnHand);
-
-    if (requestedQty.greaterThan(availableQty)) {
-      throw new InsufficientStockError(
-        product.name,
-        availableQty.toNumber(),
-        requestedQty.toNumber()
-      );
-    }
-
-    const currentCost = new Prisma.Decimal(product.unitCost);
     const unitPrice = new Prisma.Decimal(line.unitPrice);
 
-    await tx.product.update({
-      where: { id: line.productId },
-      data: { quantityOnHand: availableQty.minus(requestedQty) },
-    });
+    // Is this product an assembled bike (has a bill of materials)?
+    const bom = await tx.productComponent.findMany({ where: { bikeId: line.productId } });
+
+    let unitCost: Prisma.Decimal;
+
+    if (bom.length > 0) {
+      // Bike: consume each component from stock; the bike's per-unit cost is the
+      // sum of (component average cost × quantity used per bike).
+      unitCost = new Prisma.Decimal(0);
+      for (const part of bom) {
+        const [comp] = await tx.$queryRaw<
+          { id: string; name: string; quantityOnHand: Prisma.Decimal; unitCost: Prisma.Decimal }[]
+        >(Prisma.sql`SELECT * FROM "Product" WHERE id = ${part.componentId} FOR UPDATE`);
+        if (!comp) throw new Error(`Component ${part.componentId} not found`);
+
+        const perBike = new Prisma.Decimal(part.quantity);
+        const needed = requestedQty.times(perBike);
+        const available = new Prisma.Decimal(comp.quantityOnHand);
+
+        if (needed.greaterThan(available)) {
+          throw new InsufficientStockError(
+            comp.name,
+            available.toNumber(),
+            needed.toNumber()
+          );
+        }
+
+        await tx.product.update({
+          where: { id: comp.id },
+          data: { quantityOnHand: available.minus(needed) },
+        });
+
+        unitCost = unitCost.plus(perBike.times(new Prisma.Decimal(comp.unitCost)));
+      }
+    } else {
+      // Normal product (spare part): consume its own stock at its average cost.
+      const [product] = await tx.$queryRaw<
+        { id: string; name: string; quantityOnHand: Prisma.Decimal; unitCost: Prisma.Decimal }[]
+      >(Prisma.sql`SELECT * FROM "Product" WHERE id = ${line.productId} FOR UPDATE`);
+
+      if (!product) {
+        throw new Error(`Product ${line.productId} not found`);
+      }
+
+      const availableQty = new Prisma.Decimal(product.quantityOnHand);
+      if (requestedQty.greaterThan(availableQty)) {
+        throw new InsufficientStockError(
+          product.name,
+          availableQty.toNumber(),
+          requestedQty.toNumber()
+        );
+      }
+
+      await tx.product.update({
+        where: { id: line.productId },
+        data: { quantityOnHand: availableQty.minus(requestedQty) },
+      });
+
+      unitCost = new Prisma.Decimal(product.unitCost);
+    }
 
     saleLines.push({
       productId: line.productId,
       quantity: requestedQty,
       unitPrice,
-      unitCost: currentCost,
+      unitCost,
       lineTotal: requestedQty.times(unitPrice),
-      lineCOGS: requestedQty.times(currentCost),
+      lineCOGS: requestedQty.times(unitCost),
     });
   }
 

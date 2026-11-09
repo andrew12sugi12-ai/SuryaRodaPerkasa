@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { logAudit } from "@/server/services/audit.service";
+import { restoreStockForLineTx } from "@/server/services/sales.service";
 
 // All deletions are admin-only (enforced in the actions layer) and unwind
 // every side effect atomically: stock, journal entries, and linked records.
@@ -12,12 +13,10 @@ export async function deleteSale(saleId: string, adminId: string) {
       include: { lines: true, customer: true },
     });
 
-    // Return sold units to stock.
+    // Return sold units to stock. For an assembled bike this returns its
+    // components; for a normal product it returns the product's own stock.
     for (const line of sale.lines) {
-      await tx.product.update({
-        where: { id: line.productId },
-        data: { quantityOnHand: { increment: line.quantity } },
-      });
+      await restoreStockForLineTx(tx, line.productId, new Prisma.Decimal(line.quantity));
     }
 
     await tx.sale.delete({ where: { id: saleId } });

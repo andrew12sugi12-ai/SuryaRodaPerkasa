@@ -148,8 +148,24 @@ export async function recordSalesReturn(input: SalesReturnInput) {
       );
       cogsEntryId = cogsEntry.id;
 
-      // Restock each product, recomputing weighted-average unit cost.
+      // Restock each product. A returned bike puts its components back into
+      // stock; a returned spare part is restocked, recomputing its weighted-
+      // average unit cost.
       for (const rl of returnLines) {
+        const bom = await tx.productComponent.findMany({ where: { bikeId: rl.productId } });
+        if (bom.length > 0) {
+          for (const part of bom) {
+            await tx.product.update({
+              where: { id: part.componentId },
+              data: {
+                quantityOnHand: {
+                  increment: new Prisma.Decimal(rl.quantity).times(new Prisma.Decimal(part.quantity)),
+                },
+              },
+            });
+          }
+          continue;
+        }
         const product = await tx.product.findUniqueOrThrow({ where: { id: rl.productId } });
         const oldQty = Number(product.quantityOnHand);
         const oldCost = Number(product.unitCost);

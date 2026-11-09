@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
+import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -31,9 +32,11 @@ import {
 export function ProductForm({
   productId,
   defaultValues,
+  componentOptions = [],
 }: {
   productId?: string;
   defaultValues?: ProductInput;
+  componentOptions?: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const { dict } = useI18n();
@@ -45,12 +48,22 @@ export function ProductForm({
       sku: "",
       name: "",
       description: "",
+      category: "SPAREPART",
       unitPrice: 0,
       isActive: true,
       openingQuantity: 0,
       openingUnitCost: 0,
+      components: [],
     },
   });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "components",
+  });
+  const category = form.watch("category");
+  const components = form.watch("components") ?? [];
+  const isBike = category === "BICYCLE" && components.length > 0;
 
   async function onSubmit(values: ProductInput) {
     setIsSubmitting(true);
@@ -113,7 +126,109 @@ export function ProductForm({
             </FormItem>
           )}
         />
-        {!productId && (
+        <FormField
+          control={form.control}
+          name="category"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{dict.products.category}</FormLabel>
+              <Select
+                items={{ SPAREPART: dict.products.sparepart, BICYCLE: dict.products.bicycle }}
+                value={field.value}
+                onValueChange={field.onChange}
+              >
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={dict.products.selectCategory} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="SPAREPART">{dict.products.sparepart}</SelectItem>
+                  <SelectItem value="BICYCLE">{dict.products.bicycle}</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {category === "BICYCLE" && (
+          <div className="space-y-3 rounded-md border p-4">
+            <div>
+              <p className="text-sm font-medium">{dict.products.components}</p>
+              <p className="text-xs text-muted-foreground">{dict.products.componentsHelp}</p>
+            </div>
+            {fields.map((row, index) => (
+              <div key={row.id} className="flex items-end gap-2">
+                <FormField
+                  control={form.control}
+                  name={`components.${index}.componentId`}
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel className="text-xs">{dict.products.component}</FormLabel>
+                      <Select
+                        items={Object.fromEntries(componentOptions.map((o) => [o.id, o.label]))}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={dict.products.selectComponent} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {componentOptions.map((o) => (
+                            <SelectItem key={o.id} value={o.id}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`components.${index}.quantity`}
+                  render={({ field }) => (
+                    <FormItem className="w-24">
+                      <FormLabel className="text-xs">{dict.common.quantity}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="any"
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => remove(index)}
+                  aria-label={dict.products.removeComponent}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => append({ componentId: "", quantity: 1 })}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              {dict.products.addComponent}
+            </Button>
+          </div>
+        )}
+        {!productId && !isBike && (
           <div className="space-y-4 rounded-md border p-4">
             <div>
               <p className="text-sm font-medium">{dict.products.openingStock}</p>

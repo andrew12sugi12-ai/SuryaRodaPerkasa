@@ -3,7 +3,7 @@ import { getDict } from "@/lib/i18n/server";
 import { getSale } from "@/server/services/sales.service";
 import { listActiveCustomers } from "@/server/services/customers.service";
 import { listSettlementAccounts } from "@/server/services/accounts.service";
-import { listActiveProducts } from "@/server/services/products.service";
+import { listSellableProducts } from "@/server/services/products.service";
 import { listActiveSalesmen } from "@/server/services/salesmen.service";
 import { SaleForm } from "@/components/sales/sale-form";
 
@@ -18,7 +18,7 @@ export default async function EditSalePage({
     getSale(id),
     listActiveCustomers(),
     listSettlementAccounts("sale"),
-    listActiveProducts(),
+    listSellableProducts(),
     listActiveSalesmen(),
   ]);
   if (!sale) notFound();
