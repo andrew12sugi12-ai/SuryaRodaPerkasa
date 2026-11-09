@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { verify as verifyTotp } from "otplib";
 import { authConfig } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
@@ -12,10 +13,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        token: { label: "Authenticator code", type: "text" },
       },
       authorize: async (credentials) => {
         const email = credentials?.email;
         const password = credentials?.password;
+        const token = typeof credentials?.token === "string" ? credentials.token : "";
         if (typeof email !== "string" || typeof password !== "string") {
           return null;
         }
@@ -46,6 +49,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
           });
           return null;
+        }
+
+        // Password is correct. If this account has 2FA on, the authenticator
+        // code must also match before we let them in.
+        if (user.twoFactorEnabled && user.twoFactorSecret) {
+          const res =
+            token.length > 0
+              ? await verifyTotp({
+                  token: token.replace(/\s/g, ""),
+                  secret: user.twoFactorSecret,
+                  epochTolerance: 30, // tolerate ~30s of clock skew between server and phone
+                })
+              : null;
+          if (!res?.valid) return null;
         }
 
         if (user.failedLoginCount > 0 || user.lockedUntil) {

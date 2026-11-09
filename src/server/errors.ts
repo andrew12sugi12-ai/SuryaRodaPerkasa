@@ -13,3 +13,14 @@ export class InsufficientStockError extends Error {
     this.name = "InsufficientStockError";
   }
 }
+
+// Raised when a credit sale would breach a toko's credit controls (cash-only,
+// over credit limit, or outstanding overdue bills) and no override was given.
+export class CreditLimitError extends Error {
+  reasons: string[];
+  constructor(reasons: string[]) {
+    super(`Credit check failed: ${reasons.join(", ")}`);
+    this.name = "CreditLimitError";
+    this.reasons = reasons;
+  }
+}

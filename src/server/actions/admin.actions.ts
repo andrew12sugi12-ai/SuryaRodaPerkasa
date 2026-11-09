@@ -72,7 +72,9 @@ export async function updateSaleAction(id: string, input: SaleInput) {
   const parsed = saleSchema.parse(input);
   await updateSale(id, {
     date: parsed.date,
+    dueDate: parsed.dueDate,
     customerId: parsed.customerId,
+    salesmanId: parsed.salesmanId,
     paymentAccountId: parsed.paymentAccountId,
     reference: parsed.reference,
     createdById: user.id,
@@ -87,6 +89,7 @@ export async function updatePurchaseAction(id: string, input: PurchaseInput) {
   const parsed = purchaseSchema.parse(input);
   await updatePurchase(id, {
     date: parsed.date,
+    dueDate: parsed.dueDate,
     supplierId: parsed.supplierId,
     paymentAccountId: parsed.paymentAccountId,
     reference: parsed.reference,

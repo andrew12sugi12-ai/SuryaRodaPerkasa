@@ -28,8 +28,12 @@ const CHART_OF_ACCOUNTS: {
   { code: "1014", name: "Bank Maybank BJA", type: "ASSET", normalBalance: "DEBIT" },
   { code: "1015", name: "Bank Danamon", type: "ASSET", normalBalance: "DEBIT" },
   { code: "1016", name: "Bank BCA PT", type: "ASSET", normalBalance: "DEBIT" },
+  // Foreign-currency cash/bank (carried in IDR; see Selisih Kurs 6895)
+  { code: "1020", name: "Bank USD", type: "ASSET", normalBalance: "DEBIT" },
+  { code: "1021", name: "Bank CNY (RMB)", type: "ASSET", normalBalance: "DEBIT" },
 
   { code: "1100", name: "Piutang Dagang (Accounts Receivable)", type: "ASSET", normalBalance: "DEBIT" },
+  { code: "1150", name: "Giro Dalam Penagihan (Giro in Transit)", type: "ASSET", normalBalance: "DEBIT" },
   { code: "1200", name: "Persediaan (Inventory)", type: "ASSET", normalBalance: "DEBIT" },
   { code: "1500", name: "Aset Tetap (Fixed Assets)", type: "ASSET", normalBalance: "DEBIT", isLongTerm: true },
   { code: "1510", name: "Akumulasi Penyusutan", type: "ASSET", normalBalance: "CREDIT", isLongTerm: true },
@@ -37,6 +41,7 @@ const CHART_OF_ACCOUNTS: {
   { code: "2000", name: "Hutang Dagang (Accounts Payable)", type: "LIABILITY", normalBalance: "CREDIT" },
   { code: "2100", name: "Hutang Bank", type: "LIABILITY", normalBalance: "CREDIT", isLongTerm: true },
   { code: "2200", name: "Hutang Pajak", type: "LIABILITY", normalBalance: "CREDIT" },
+  { code: "2300", name: "Hutang Bea Cukai & Impor", type: "LIABILITY", normalBalance: "CREDIT" },
 
   { code: "3000", name: "Modal Pemilik (Owner's Equity)", type: "EQUITY", normalBalance: "CREDIT" },
   { code: "3100", name: "Laba Ditahan (Retained Earnings)", type: "EQUITY", normalBalance: "CREDIT" },
@@ -66,6 +71,7 @@ const CHART_OF_ACCOUNTS: {
   // B. Lain-Lain
   { code: "6850", name: "Biaya Pajak & BPJS", type: "EXPENSE", normalBalance: "DEBIT", expenseCategory: "OTHER" },
   { code: "6890", name: "Penyesuaian Persediaan", type: "EXPENSE", normalBalance: "DEBIT", expenseCategory: "OTHER" },
+  { code: "6895", name: "Laba/Rugi Selisih Kurs (FX Gain/Loss)", type: "EXPENSE", normalBalance: "DEBIT", expenseCategory: "OTHER" },
   { code: "6900", name: "Biaya Lain-Lain", type: "EXPENSE", normalBalance: "DEBIT", expenseCategory: "OTHER" },
 ];
 
@@ -94,7 +100,7 @@ async function main() {
   const userCount = await prisma.user.count();
   if (userCount === 0) {
     const name = process.env.ADMIN_NAME || "Admin";
-    const email = process.env.ADMIN_EMAIL || "admin@indocycle.local";
+    const email = process.env.ADMIN_EMAIL || "admin@suryaroda.local";
     const password = process.env.ADMIN_PASSWORD || "change-me-now";
 
     await prisma.user.create({

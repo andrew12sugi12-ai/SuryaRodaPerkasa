@@ -2,6 +2,8 @@ import { getCashFlow } from "@/server/services/reports.service";
 import { getDict } from "@/lib/i18n/server";
 import { formatIDR } from "@/lib/currency";
 import { DateFilter } from "@/components/reports/date-filter";
+import { PrintButton } from "@/components/reports/print-button";
+import { ExcelButton } from "@/components/reports/excel-button";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -13,14 +15,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { reportToday, reportFirstOfMonth } from "@/lib/report-dates";
 
-function firstOfMonthISO() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
+const todayISO = reportToday;
+const firstOfMonthISO = reportFirstOfMonth;
 
 function Row({ label, amount }: { label: string; amount: number }) {
   return (
@@ -48,15 +46,21 @@ export default async function CashFlowPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between no-print">
         <h1 className="text-2xl font-semibold tracking-tight">{t.cashFlowTitle}</h1>
-        <div className="flex gap-3">
+        <div className="flex items-end gap-3">
           <DateFilter paramName="start" label={t.from} defaultValue={firstOfMonthISO()} />
           <DateFilter paramName="end" label={t.to} defaultValue={todayISO()} />
+          <ExcelButton href={`/api/reports/export?type=cashflow&start=${start}&end=${end}`} />
+          <PrintButton />
         </div>
       </div>
 
-      <div className="max-w-xl space-y-4 rounded-md border p-6">
+      <div className="mx-auto max-w-xl space-y-4 rounded-xl border bg-card p-6">
+        <div className="border-b pb-3 text-center">
+          <p className="text-base font-semibold">{t.companyName}</p>
+          <p className="text-sm font-medium">{t.cashFlowTitle}</p>
+        </div>
         <div className="flex justify-between text-sm font-medium">
           <span>{t.openingBalance}</span>
           <span>{formatIDR(flow.openingBalance)}</span>

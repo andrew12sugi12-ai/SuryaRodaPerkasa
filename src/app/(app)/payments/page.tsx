@@ -2,6 +2,8 @@ import { listPayments } from "@/server/services/payments.service";
 import { auth } from "@/auth";
 import { deletePaymentAction } from "@/server/actions/admin.actions";
 import { ConfirmDeleteButton } from "@/components/admin/confirm-delete-button";
+import { GiroPaymentActions } from "@/components/payments/giro-payment-actions";
+import { AttachmentCell } from "@/components/payments/attachment-cell";
 import { getDict } from "@/lib/i18n/server";
 import { formatIDR } from "@/lib/currency";
 import { LinkButton } from "@/components/ui/link-button";
@@ -34,10 +36,11 @@ export default async function PaymentsPage() {
             <TableHead>{dict.common.date}</TableHead>
             <TableHead>{dict.common.type}</TableHead>
             <TableHead>{dict.payments.party}</TableHead>
+            <TableHead>{dict.payments.method}</TableHead>
             <TableHead>{dict.common.account}</TableHead>
-            <TableHead>{dict.common.reference}</TableHead>
+            <TableHead>{dict.payments.proof}</TableHead>
             <TableHead className="text-right">{dict.common.amount}</TableHead>
-            {isAdmin && <TableHead className="text-right">{dict.common.actions}</TableHead>}
+            <TableHead className="text-right">{dict.common.actions}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -50,25 +53,41 @@ export default async function PaymentsPage() {
                 </Badge>
               </TableCell>
               <TableCell>{p.customer?.name ?? p.supplier?.name ?? "—"}</TableCell>
+              <TableCell>
+                <span className="text-sm">{dict.payments.methodLabels[p.method] ?? p.method}</span>
+                {p.giroStatus && (
+                  <Badge
+                    variant={p.giroStatus === "CLEARED" ? "default" : p.giroStatus === "BOUNCED" ? "destructive" : "secondary"}
+                    className="ml-2"
+                  >
+                    {dict.payments.giroStatusLabels[p.giroStatus] ?? p.giroStatus}
+                  </Badge>
+                )}
+              </TableCell>
               <TableCell className="text-muted-foreground">
                 {p.account.code} — {p.account.name}
               </TableCell>
-              <TableCell className="text-muted-foreground">{p.reference || "—"}</TableCell>
+              <TableCell>
+                <AttachmentCell paymentId={p.id} hasAttachment={!!p.attachmentPath} />
+              </TableCell>
               <TableCell className="text-right">{formatIDR(p.amount)}</TableCell>
-              {isAdmin && (
-                <TableCell className="text-right">
-                  <ConfirmDeleteButton
-                    action={deletePaymentAction.bind(null, p.id)}
-                    description={`${dict.payments.title}: ${p.customer?.name ?? p.supplier?.name ?? ""} — ${formatIDR(p.amount)}`}
-                    size="xs"
-                  />
-                </TableCell>
-              )}
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  {p.giroStatus === "PENDING" && <GiroPaymentActions paymentId={p.id} />}
+                  {isAdmin && (
+                    <ConfirmDeleteButton
+                      action={deletePaymentAction.bind(null, p.id)}
+                      description={`${dict.payments.title}: ${p.customer?.name ?? p.supplier?.name ?? ""} — ${formatIDR(p.amount)}`}
+                      size="xs"
+                    />
+                  )}
+                </div>
+              </TableCell>
             </TableRow>
           ))}
           {payments.length === 0 && (
             <TableRow>
-              <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-muted-foreground">
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
                 {dict.payments.noPayments}
               </TableCell>
             </TableRow>

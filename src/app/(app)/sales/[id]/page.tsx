@@ -36,6 +36,12 @@ export default async function SaleDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
+          <LinkButton href={`/sales/${sale.id}/invoice`} variant="outline" size="sm">
+            {dict.reports.exportInvoice}
+          </LinkButton>
+          <LinkButton href={`/sales/${sale.id}/return`} variant="outline" size="sm">
+            {dict.returns.newReturn}
+          </LinkButton>
           <LinkButton href={`/sales/${sale.id}/edit`} variant="outline" size="sm">
             {dict.common.edit}
           </LinkButton>
@@ -47,8 +53,18 @@ export default async function SaleDetailPage({
         </div>
       </div>
 
+      {sale.salesman && (
+        <p className="text-sm text-muted-foreground">
+          {dict.contacts.salesman}: {sale.salesman.name}
+        </p>
+      )}
       {sale.reference && (
         <p className="text-sm text-muted-foreground">{dict.common.reference}: {sale.reference}</p>
+      )}
+      {sale.dueDate && (
+        <p className="text-sm text-muted-foreground">
+          {dict.contacts.dueDate}: {sale.dueDate.toLocaleDateString("id-ID")}
+        </p>
       )}
 
       <Table>

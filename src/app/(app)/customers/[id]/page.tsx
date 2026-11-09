@@ -1,10 +1,13 @@
 import { notFound } from "next/navigation";
 import { getDict } from "@/lib/i18n/server";
 import Link from "next/link";
-import { getCustomerDetail } from "@/server/services/balances.service";
+import { getCustomerDetail, getCustomerLedger } from "@/server/services/balances.service";
 import { formatIDR } from "@/lib/currency";
 import { LinkButton } from "@/components/ui/link-button";
+import { KartuLedger } from "@/components/contacts/kartu-ledger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DuePill } from "@/components/shared/due-pill";
+import { daysUntil } from "@/lib/due";
 import {
   Table,
   TableBody,
@@ -24,6 +27,7 @@ export default async function CustomerDetailPage({
   const { customer, receivable, sales, payments, productSummary } =
     await getCustomerDetail(id);
   if (!customer) notFound();
+  const ledger = await getCustomerLedger(id);
 
   return (
     <div className="space-y-6">
@@ -52,11 +56,20 @@ export default async function CustomerDetailPage({
       <Card className="max-w-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            {dict.contacts.outstandingReceivable}
+            {receivable < 0 ? dict.contacts.customerAdvance : dict.contacts.outstandingReceivable}
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-2xl font-semibold">{formatIDR(receivable)}</CardContent>
+        <CardContent className="text-2xl font-semibold">
+          {formatIDR(Math.abs(receivable))}
+        </CardContent>
       </Card>
+
+      <KartuLedger
+        title={dict.contacts.kartuPiutang}
+        subtitle={`${dict.reports.companyName} · ${customer.name}`}
+        entries={ledger.entries}
+        balance={ledger.balance}
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">{dict.contacts.productsPurchased}</h2>
@@ -95,6 +108,7 @@ export default async function CustomerDetailPage({
           <TableHeader>
             <TableRow>
               <TableHead>{dict.common.date}</TableHead>
+              <TableHead>{dict.contacts.dueColumn}</TableHead>
               <TableHead>{dict.common.reference}</TableHead>
               <TableHead>{dict.contacts.billedTo}</TableHead>
               <TableHead className="text-right">{dict.common.total}</TableHead>
@@ -108,6 +122,16 @@ export default async function CustomerDetailPage({
                     {s.date.toLocaleDateString("id-ID")}
                   </Link>
                 </TableCell>
+                <TableCell>
+                  {s.dueDate ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{s.dueDate.toLocaleDateString("id-ID")}</span>
+                      {receivable > 0 && <DuePill days={daysUntil(s.dueDate)} />}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell>{s.reference || "—"}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {s.paymentAccount.code} — {s.paymentAccount.name}
@@ -117,7 +141,7 @@ export default async function CustomerDetailPage({
             ))}
             {sales.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   {dict.contacts.noSalesYet}
                 </TableCell>
               </TableRow>

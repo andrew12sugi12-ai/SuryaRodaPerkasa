@@ -115,6 +115,12 @@ export async function deletePayment(paymentId: string, adminId: string) {
 
     await tx.payment.delete({ where: { id: paymentId } });
     await tx.journalEntry.delete({ where: { id: payment.journalEntryId } });
+    // A giro/cek that was cleared or bounced has a second journal entry
+    // (Dr Bank / Cr Giro-in-Transit, or the bounce reversal). Delete it too,
+    // otherwise the bank / giro-in-transit side is left dangling.
+    if (payment.clearJournalEntryId) {
+      await tx.journalEntry.delete({ where: { id: payment.clearJournalEntryId } });
+    }
 
     await logAudit(
       "DELETE_PAYMENT",

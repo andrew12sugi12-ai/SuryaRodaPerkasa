@@ -23,6 +23,7 @@ import { Card, CardContent } from "@/components/ui/card";
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   password: z.string().min(1, "Password is required"),
+  token: z.string().optional(),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -36,7 +37,7 @@ export function LoginForm() {
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", token: "" },
   });
 
   async function onSubmit(values: LoginValues) {
@@ -45,6 +46,7 @@ export function LoginForm() {
     const result = await signIn("credentials", {
       email: values.email,
       password: values.password,
+      token: values.token ?? "",
       redirect: false,
     });
     setIsSubmitting(false);
@@ -87,6 +89,25 @@ export function LoginForm() {
                     <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="token"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.login.twoFactorCode}</FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      className="tabular-nums tracking-widest"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">{dict.login.twoFactorHint}</p>
                 </FormItem>
               )}
             />

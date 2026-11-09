@@ -14,6 +14,7 @@ import { updateJournalEntryAction } from "@/server/actions/admin.actions";
 import { formatIDR } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Form,
   FormControl,
@@ -198,17 +199,11 @@ export function JournalEntryForm({
                     control={form.control}
                     name={`lines.${index}.debit`}
                     render={({ field: f }) => (
-                      <Input
-                        type="number"
-                        step="1"
-                        min="0"
-                        className="text-right"
-                        {...f}
-                        onChange={(e) => {
-                          f.onChange(e.target.valueAsNumber || 0);
-                          if (e.target.valueAsNumber > 0) {
-                            form.setValue(`lines.${index}.credit`, 0);
-                          }
+                      <CurrencyInput
+                        value={f.value}
+                        onValueChange={(v) => {
+                          f.onChange(v ?? 0);
+                          if ((v ?? 0) > 0) form.setValue(`lines.${index}.credit`, 0);
                         }}
                       />
                     )}
@@ -219,17 +214,11 @@ export function JournalEntryForm({
                     control={form.control}
                     name={`lines.${index}.credit`}
                     render={({ field: f }) => (
-                      <Input
-                        type="number"
-                        step="1"
-                        min="0"
-                        className="text-right"
-                        {...f}
-                        onChange={(e) => {
-                          f.onChange(e.target.valueAsNumber || 0);
-                          if (e.target.valueAsNumber > 0) {
-                            form.setValue(`lines.${index}.debit`, 0);
-                          }
+                      <CurrencyInput
+                        value={f.value}
+                        onValueChange={(v) => {
+                          f.onChange(v ?? 0);
+                          if ((v ?? 0) > 0) form.setValue(`lines.${index}.debit`, 0);
                         }}
                       />
                     )}

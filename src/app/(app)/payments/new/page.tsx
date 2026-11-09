@@ -2,6 +2,7 @@ import { listActiveCustomers } from "@/server/services/customers.service";
 import { getDict } from "@/lib/i18n/server";
 import { listActiveSuppliers } from "@/server/services/suppliers.service";
 import { listCashBankAccounts } from "@/server/services/accounts.service";
+import { getCreditSnapshotMap } from "@/server/services/credit.service";
 import { PaymentForm } from "@/components/payments/payment-form";
 
 export default async function NewPaymentPage({
@@ -11,11 +12,16 @@ export default async function NewPaymentPage({
 }) {
   const dict = await getDict();
   const params = await searchParams;
-  const [customers, suppliers, accounts] = await Promise.all([
+  const [customers, suppliers, accounts, creditSnapshot] = await Promise.all([
     listActiveCustomers(),
     listActiveSuppliers(),
     listCashBankAccounts(),
+    getCreditSnapshotMap(),
   ]);
+
+  const receivableByCustomer: Record<string, number> = Object.fromEntries(
+    Object.entries(creditSnapshot).map(([id, snap]) => [id, snap.receivable])
+  );
 
   const defaultType =
     params.type === "SUPPLIER_PAYMENT" || params.supplierId
@@ -32,6 +38,7 @@ export default async function NewPaymentPage({
         defaultType={defaultType}
         defaultCustomerId={params.customerId}
         defaultSupplierId={params.supplierId}
+        receivableByCustomer={receivableByCustomer}
       />
     </div>
   );

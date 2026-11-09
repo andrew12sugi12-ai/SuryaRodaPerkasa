@@ -12,9 +12,9 @@ async function requireUser() {
 }
 
 export async function createSupplierAction(input: SupplierInput) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = supplierSchema.parse(input);
-  const supplier = await suppliersService.createSupplier(parsed);
+  const supplier = await suppliersService.createSupplier(parsed, user.id);
   revalidatePath("/suppliers");
   return supplier;
 }

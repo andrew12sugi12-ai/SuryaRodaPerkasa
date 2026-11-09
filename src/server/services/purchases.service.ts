@@ -6,6 +6,7 @@ const INVENTORY_ACCOUNT_CODE = "1200";
 
 export type RecordPurchaseInput = {
   date: Date;
+  dueDate?: Date | null;
   supplierId: string;
   paymentAccountId: string;
   reference?: string | null;
@@ -124,6 +125,7 @@ export async function recordPurchaseTx(tx: Tx, input: RecordPurchaseInput) {
   return tx.purchase.create({
     data: {
       date: input.date,
+      dueDate: input.dueDate ?? null,
       supplierId: input.supplierId,
       paymentAccountId: input.paymentAccountId,
       reference: input.reference,

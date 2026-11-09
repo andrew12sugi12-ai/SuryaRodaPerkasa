@@ -27,12 +27,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type Option = { id: string; label: string };
+
 export function CustomerForm({
   customerId,
   defaultValues,
+  salesmen = [],
 }: {
   customerId?: string;
   defaultValues?: CustomerInput;
+  salesmen?: Option[];
 }) {
   const router = useRouter();
   const { dict } = useI18n();
@@ -47,8 +51,19 @@ export function CustomerForm({
       email: "",
       address: "",
       isActive: true,
+      openingBalance: 0,
+      creditLimit: 0,
+      termDays: 0,
+      cashOnly: false,
+      salesmanId: "",
     },
   });
+
+  const NONE = "__none__";
+  const salesmanItems = {
+    [NONE]: dict.contacts.noSalesman,
+    ...Object.fromEntries(salesmen.map((s) => [s.id, s.label])),
+  };
 
   async function onSubmit(values: CustomerInput) {
     setIsSubmitting(true);
@@ -137,6 +152,127 @@ export function CustomerForm({
             </FormItem>
           )}
         />
+        <div className="rounded-md border p-4 space-y-4">
+          <p className="text-sm font-medium">{dict.contacts.creditControl}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="creditLimit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.contacts.creditLimit}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={field.value ?? 0}
+                      onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">{dict.contacts.creditLimitHelp}</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="termDays"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.contacts.termDays}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={field.value ?? 0}
+                      onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">{dict.contacts.termDaysHelp}</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="salesmanId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.contacts.salesman}</FormLabel>
+                  <Select
+                    items={salesmanItems}
+                    value={field.value ? field.value : NONE}
+                    onValueChange={(value) => field.onChange(value === NONE ? "" : value)}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={dict.contacts.noSalesman} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NONE}>{dict.contacts.noSalesman}</SelectItem>
+                      {salesmen.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cashOnly"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.contacts.paymentTerms}</FormLabel>
+                  <Select
+                    items={{ credit: dict.contacts.allowCredit, cash: dict.contacts.cashOnly }}
+                    value={field.value ? "cash" : "credit"}
+                    onValueChange={(value) => field.onChange(value === "cash")}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="credit">{dict.contacts.allowCredit}</SelectItem>
+                      <SelectItem value="cash">{dict.contacts.cashOnly}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+        {!customerId && (
+          <FormField
+            control={form.control}
+            name="openingBalance"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.contacts.openingReceivable}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={field.value ?? 0}
+                    onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">{dict.contacts.openingBalanceHelp}</p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
         <FormField
           control={form.control}
           name="isActive"

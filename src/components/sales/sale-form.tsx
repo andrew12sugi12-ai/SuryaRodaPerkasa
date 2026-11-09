@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
-import { Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 
 import { saleSchema, type SaleInput } from "@/lib/validation/sale";
 import { recordSaleAction } from "@/server/actions/sales.actions";
@@ -14,6 +14,7 @@ import { updateSaleAction } from "@/server/actions/admin.actions";
 import { formatIDR } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Form,
   FormControl,
@@ -40,22 +41,38 @@ import {
 
 type Option = { id: string; label: string };
 type ProductOption = Option & { quantityOnHand: number };
+type CreditInfo = {
+  creditLimit: number;
+  cashOnly: boolean;
+  termDays: number;
+  receivable: number;
+  hasOverdue: boolean;
+};
 
 export function SaleForm({
   customers,
   accounts,
   products,
+  salesmen = [],
+  customerSalesman = {},
   saleId,
   defaultValues,
+  creditMap = {},
+  arAccountId,
 }: {
   customers: Option[];
   accounts: Option[];
   products: ProductOption[];
+  salesmen?: Option[];
+  customerSalesman?: Record<string, string>;
   saleId?: string;
   defaultValues?: SaleInput;
+  creditMap?: Record<string, CreditInfo>;
+  arAccountId?: string;
 }) {
   const router = useRouter();
   const { dict } = useI18n();
+  const c = dict.credit;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<SaleInput>({
@@ -63,15 +80,59 @@ export function SaleForm({
     defaultValues: defaultValues ?? {
       date: new Date(),
       customerId: "",
+      salesmanId: "",
       paymentAccountId: "",
       reference: "",
       lines: [{ productId: "", quantity: 1, unitPrice: 0 }],
     },
   });
 
+  const SALESMAN_NONE = "__none__";
+  const salesmanItems = {
+    [SALESMAN_NONE]: dict.contacts.noSalesman,
+    ...Object.fromEntries(salesmen.map((s) => [s.id, s.label])),
+  };
+
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
   const lines = form.watch("lines");
   const total = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
+
+  const watchedCustomerId = form.watch("customerId");
+  const watchedAccountId = form.watch("paymentAccountId");
+  const watchedDate = form.watch("date");
+  const isCreditSale = !!arAccountId && watchedAccountId === arAccountId;
+  const credit = creditMap[watchedCustomerId];
+
+  // Credit-control evaluation (mirrors the server guard in credit.service).
+  const creditReasons: string[] = [];
+  if (isCreditSale && credit) {
+    if (credit.cashOnly) creditReasons.push(c.reasonCashOnly);
+    if (credit.creditLimit > 0 && credit.receivable + total > credit.creditLimit + 0.005)
+      creditReasons.push(c.reasonOverLimit);
+    if (credit.hasOverdue) creditReasons.push(c.reasonOverdue);
+  }
+  const hasCreditWarning = creditReasons.length > 0;
+
+  // Auto-fill the due date from the toko's tempo (termDays) for credit sales,
+  // unless the user has already set one.
+  useEffect(() => {
+    if (!isCreditSale || !credit || credit.termDays <= 0) return;
+    if (form.getValues("dueDate")) return;
+    const base = watchedDate instanceof Date ? watchedDate : new Date();
+    const due = new Date(base);
+    due.setDate(due.getDate() + credit.termDays);
+    form.setValue("dueDate", due);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedCustomerId, watchedAccountId]);
+
+  // Default the salesman to the toko's assigned rep when none is chosen yet.
+  // Leaves an existing choice (or an edited sale's salesman) untouched.
+  useEffect(() => {
+    if (form.getValues("salesmanId")) return;
+    const defaultSalesman = customerSalesman[watchedCustomerId];
+    if (defaultSalesman) form.setValue("salesmanId", defaultSalesman);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedCustomerId]);
 
   const customerItems = Object.fromEntries(customers.map((c) => [c.id, c.label]));
   const accountItems = Object.fromEntries(accounts.map((a) => [a.id, a.label]));
@@ -79,11 +140,19 @@ export function SaleForm({
   const productById = Object.fromEntries(products.map((p) => [p.id, p]));
 
   async function onSubmit(values: SaleInput) {
+    // Credit-sale guard: make the user confirm before breaching a toko's limits.
+    let override = false;
+    if (!saleId && hasCreditWarning) {
+      const ok = window.confirm(`${c.warningTitle}\n\n• ${creditReasons.join("\n• ")}\n\n${c.confirmOverride}`);
+      if (!ok) return;
+      override = true;
+    }
+
     setIsSubmitting(true);
     try {
       const result = saleId
         ? await updateSaleAction(saleId, values)
-        : await recordSaleAction(values);
+        : await recordSaleAction(values, { override });
       toast.success(saleId ? dict.common.saveChanges : dict.sales.saleRecorded);
       router.push(`/sales/${result.id}`);
       router.refresh();
@@ -97,7 +166,7 @@ export function SaleForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <FormField
             control={form.control}
             name="date"
@@ -121,6 +190,29 @@ export function SaleForm({
           />
           <FormField
             control={form.control}
+            name="dueDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.contacts.dueDate}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    value={
+                      field.value instanceof Date
+                        ? field.value.toISOString().slice(0, 10)
+                        : ""
+                    }
+                    onChange={(e) =>
+                      field.onChange(e.target.value ? new Date(e.target.value) : undefined)
+                    }
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
             name="customerId"
             render={({ field }) => (
               <FormItem>
@@ -135,6 +227,35 @@ export function SaleForm({
                     {customers.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="salesmanId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.contacts.salesman}</FormLabel>
+                <Select
+                  items={salesmanItems}
+                  value={field.value ? field.value : SALESMAN_NONE}
+                  onValueChange={(value) => field.onChange(value === SALESMAN_NONE ? "" : value)}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={dict.contacts.noSalesman} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value={SALESMAN_NONE}>{dict.contacts.noSalesman}</SelectItem>
+                    {salesmen.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -181,6 +302,48 @@ export function SaleForm({
             )}
           />
         </div>
+
+        {isCreditSale && credit && (
+          <div
+            className={
+              hasCreditWarning
+                ? "rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-950/30"
+                : "rounded-md border bg-muted/30 p-3 text-sm"
+            }
+          >
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">{c.currentReceivable}</span>
+              <span className="tabular-nums font-medium">{formatIDR(credit.receivable)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">{c.creditLimit}</span>
+              <span className="tabular-nums font-medium">
+                {credit.creditLimit > 0 ? formatIDR(credit.creditLimit) : c.noLimit}
+              </span>
+            </div>
+            {credit.creditLimit > 0 && (
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">{c.availableAfterSale}</span>
+                <span className="tabular-nums font-medium">
+                  {formatIDR(credit.creditLimit - credit.receivable - total)}
+                </span>
+              </div>
+            )}
+            {hasCreditWarning && (
+              <div className="mt-2 flex items-start gap-2 text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <div>
+                  <p className="font-medium">{c.warningTitle}</p>
+                  <ul className="list-inside list-disc">
+                    {creditReasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <Table>
           <TableHeader>
@@ -250,14 +413,7 @@ export function SaleForm({
                       control={form.control}
                       name={`lines.${index}.unitPrice`}
                       render={({ field: f }) => (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="text-right"
-                          {...f}
-                          onChange={(e) => f.onChange(e.target.valueAsNumber || 0)}
-                        />
+                        <CurrencyInput value={f.value} onValueChange={(v) => f.onChange(v ?? 0)} />
                       )}
                     />
                   </TableCell>

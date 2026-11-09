@@ -4,6 +4,7 @@ import { getSale } from "@/server/services/sales.service";
 import { listActiveCustomers } from "@/server/services/customers.service";
 import { listSettlementAccounts } from "@/server/services/accounts.service";
 import { listActiveProducts } from "@/server/services/products.service";
+import { listActiveSalesmen } from "@/server/services/salesmen.service";
 import { SaleForm } from "@/components/sales/sale-form";
 
 export default async function EditSalePage({
@@ -13,13 +14,18 @@ export default async function EditSalePage({
 }) {
   const dict = await getDict();
   const { id } = await params;
-  const [sale, customers, accounts, products] = await Promise.all([
+  const [sale, customers, accounts, products, salesmen] = await Promise.all([
     getSale(id),
     listActiveCustomers(),
     listSettlementAccounts("sale"),
     listActiveProducts(),
+    listActiveSalesmen(),
   ]);
   if (!sale) notFound();
+
+  const customerSalesman = Object.fromEntries(
+    customers.filter((c) => c.salesmanId).map((c) => [c.id, c.salesmanId as string])
+  );
 
   return (
     <div className="space-y-6">
@@ -35,9 +41,13 @@ export default async function EditSalePage({
           label: `${p.sku} — ${p.name}`,
           quantityOnHand: Number(p.quantityOnHand),
         }))}
+        salesmen={salesmen.map((s) => ({ id: s.id, label: s.name }))}
+        customerSalesman={customerSalesman}
         defaultValues={{
           date: sale.date,
+          dueDate: sale.dueDate ?? undefined,
           customerId: sale.customerId,
+          salesmanId: sale.salesmanId ?? "",
           paymentAccountId: sale.paymentAccountId,
           reference: sale.reference ?? "",
           lines: sale.lines.map((l) => ({

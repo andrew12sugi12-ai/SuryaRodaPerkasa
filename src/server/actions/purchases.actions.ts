@@ -17,6 +17,7 @@ export async function recordPurchaseAction(input: PurchaseInput) {
 
   const purchase = await recordPurchase({
     date: parsed.date,
+    dueDate: parsed.dueDate,
     supplierId: parsed.supplierId,
     paymentAccountId: parsed.paymentAccountId,
     reference: parsed.reference,

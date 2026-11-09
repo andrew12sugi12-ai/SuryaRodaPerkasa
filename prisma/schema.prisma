@@ -34,6 +34,8 @@ enum JournalSourceType {
   EXPENSE
   PAYMENT
   ADJUSTMENT
+  LANDED_COST
+  SALE_RETURN
 }
 
 enum ExpenseCategory {
@@ -49,6 +51,20 @@ enum PaymentType {
   SUPPLIER_PAYMENT
 }
 
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  GIRO
+  CEK
+}
+
+// Clearing state for a giro/cek payment. Null for cash/transfer.
+enum GiroStatus {
+  PENDING
+  CLEARED
+  BOUNCED
+}
+
 model User {
   id             String         @id @default(cuid())
   name           String
@@ -58,6 +74,8 @@ model User {
   isActive       Boolean        @default(true)
   failedLoginCount Int          @default(0)
   lockedUntil    DateTime?
+  twoFactorEnabled Boolean      @default(false)
+  twoFactorSecret String?
   createdAt      DateTime       @default(now())
   journalEntries JournalEntry[]
   auditLogs      AuditLog[]
@@ -110,11 +128,13 @@ model JournalEntry {
   createdBy   User              @relation(fields: [createdById], references: [id])
   createdAt   DateTime          @default(now())
 
-  lines       JournalLine[]
-  purchase    Purchase?         @relation("PurchaseJournal")
-  saleRevenue Sale?             @relation("SaleRevenueJournal")
-  saleCOGS    Sale?             @relation("SaleCOGSJournal")
-  payment     Payment?          @relation("PaymentJournal")
+  lines          JournalLine[]
+  purchase       Purchase?         @relation("PurchaseJournal")
+  saleRevenue    Sale?             @relation("SaleRevenueJournal")
+  saleCOGS       Sale?             @relation("SaleCOGSJournal")
+  payment        Payment?          @relation("PaymentJournal")
+  returnRevenue  SalesReturn?      @relation("ReturnRevenueJournal")
+  returnCOGS     SalesReturn?      @relation("ReturnCOGSJournal")
 
   @@index([date])
 }
@@ -144,34 +164,63 @@ model Product {
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  purchaseLines PurchaseLine[]
-  saleLines     SaleLine[]
+  purchaseLines    PurchaseLine[]
+  saleLines        SaleLine[]
+  salesReturnLines SalesReturnLine[]
 }
 
 model Supplier {
-  id          String  @id @default(cuid())
-  name        String
-  contactName String?
-  phone       String?
-  email       String?
-  address     String?
-  isActive    Boolean @default(true)
+  id             String  @id @default(cuid())
+  name           String
+  contactName    String?
+  phone          String?
+  email          String?
+  address        String?
+  isActive       Boolean   @default(true)
+  openingBalance Decimal   @default(0) @db.Decimal(18, 2)
 
   purchases Purchase[]
   payments  Payment[]
 }
 
-model Customer {
-  id          String  @id @default(cuid())
-  name        String
-  contactName String?
-  phone       String?
-  email       String?
-  address     String?
-  isActive    Boolean @default(true)
+// Sales rep (salesman) who owns a set of toko relationships. Promoted from a
+// free-text field on Customer so we can track performance and targets.
+model Salesman {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  monthlyTarget Decimal  @default(0) @db.Decimal(18, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
-  sales    Sale[]
-  payments Payment[]
+  customers Customer[]
+  sales     Sale[]
+}
+
+model Customer {
+  id             String  @id @default(cuid())
+  name           String
+  contactName    String?
+  phone          String?
+  email          String?
+  address        String?
+  isActive       Boolean   @default(true)
+  openingBalance Decimal   @default(0) @db.Decimal(18, 2)
+  // Credit control (B2B tempo terms)
+  creditLimit    Decimal   @default(0) @db.Decimal(18, 2)
+  termDays       Int       @default(0)
+  // Legacy free-text salesman name; superseded by salesmanId. Kept so existing
+  // data is not lost during the migration.
+  salesman       String?
+  salesmanId     String?
+  salesmanRel    Salesman? @relation(fields: [salesmanId], references: [id])
+  cashOnly       Boolean   @default(false)
+
+  sales         Sale[]
+  payments      Payment[]
+  salesReturns  SalesReturn[]
+
+  @@index([salesmanId])
 }
 
 model Payment {
@@ -185,6 +234,25 @@ model Payment {
   accountId      String
   account        Account      @relation("PaymentAccount", fields: [accountId], references: [id])
   amount         Decimal      @db.Decimal(18, 2)
+  // Actual IDR that moved through the cash/bank account. Differs from `amount`
+  // only for foreign-currency settlements; the gap is the FX gain/loss
+  // (Selisih Kurs). Null = same as `amount` (ordinary IDR payment).
+  cashAmount     Decimal?     @db.Decimal(18, 2)
+  // Payment method & giro/cek detail.
+  method           PaymentMethod @default(TRANSFER)
+  instrumentNumber String?      // giro/cek number
+  instrumentBank   String?      // issuing bank of the giro/cek
+  dueDate          DateTime?    // giro effective/clearing date
+  giroStatus       GiroStatus?  // PENDING/CLEARED/BOUNCED for giro/cek; null otherwise
+  bounceReason     String?
+  // For a giro/cek: the clearing or bounce journal entry (second posting).
+  clearJournalEntryId String?
+  // Early-payment discount (potongan pelunasan) given on a customer receipt.
+  discount       Decimal?     @db.Decimal(18, 2)
+  // Uploaded proof (bukti transfer / giro photo), stored on the server disk.
+  attachmentPath String?
+  attachmentName String?
+  attachmentType String?
   reference      String?
   memo           String?
   journalEntryId String       @unique
@@ -195,11 +263,13 @@ model Payment {
   @@index([customerId])
   @@index([supplierId])
   @@index([date])
+  @@index([giroStatus])
 }
 
 model Purchase {
   id               String   @id @default(cuid())
   date             DateTime
+  dueDate          DateTime?
   supplierId       String
   supplier         Supplier @relation(fields: [supplierId], references: [id])
   reference        String?
@@ -233,8 +303,13 @@ model PurchaseLine {
 model Sale {
   id                    String       @id @default(cuid())
   date                  DateTime
+  dueDate               DateTime?
   customerId            String
   customer              Customer     @relation(fields: [customerId], references: [id])
+  // Salesman credited for this sale. Defaults to the toko's assigned rep but can
+  // be overridden per sale; kept on the sale so history stays accurate.
+  salesmanId            String?
+  salesman              Salesman?    @relation(fields: [salesmanId], references: [id])
   reference             String?
   paymentAccountId      String
   paymentAccount        Account      @relation("SalePaymentAccount", fields: [paymentAccountId], references: [id])
@@ -247,9 +322,11 @@ model Sale {
   createdById           String
   createdAt             DateTime     @default(now())
 
-  lines SaleLine[]
+  lines         SaleLine[]
+  salesReturns  SalesReturn[]
 
   @@index([customerId])
+  @@index([salesmanId])
   @@index([date])
 }
 
@@ -264,6 +341,50 @@ model SaleLine {
   unitCost   Decimal @db.Decimal(18, 2)
   lineTotal  Decimal @db.Decimal(18, 2)
   lineCOGS   Decimal @db.Decimal(18, 2)
+
+  @@index([productId])
+}
+
+// Nota Retur / Nota Kredit — a sales return against a sale.
+model SalesReturn {
+  id            String   @id @default(cuid())
+  number        String?  // nota kredit number
+  date          DateTime
+  saleId        String
+  sale          Sale     @relation(fields: [saleId], references: [id])
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  reason        String?
+  totalAmount   Decimal  @db.Decimal(18, 2) // revenue reduced
+  totalCOGS     Decimal  @db.Decimal(18, 2) // inventory restored
+  restock       Boolean  @default(true)     // false = scrap to damaged goods
+  // true when the original sale was on credit, so the return reduces AR.
+  settledToAR   Boolean  @default(false)
+  revenueJournalEntryId String       @unique
+  revenueJournalEntry   JournalEntry @relation("ReturnRevenueJournal", fields: [revenueJournalEntryId], references: [id])
+  cogsJournalEntryId    String?      @unique
+  cogsJournalEntry      JournalEntry? @relation("ReturnCOGSJournal", fields: [cogsJournalEntryId], references: [id])
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  lines SalesReturnLine[]
+
+  @@index([saleId])
+  @@index([customerId])
+  @@index([date])
+}
+
+model SalesReturnLine {
+  id             String      @id @default(cuid())
+  salesReturnId  String
+  salesReturn    SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id])
+  quantity       Decimal     @db.Decimal(18, 3)
+  unitPrice      Decimal     @db.Decimal(18, 2)
+  unitCost       Decimal     @db.Decimal(18, 2)
+  lineTotal      Decimal     @db.Decimal(18, 2)
+  lineCOGS       Decimal     @db.Decimal(18, 2)
 
   @@index([productId])
 }

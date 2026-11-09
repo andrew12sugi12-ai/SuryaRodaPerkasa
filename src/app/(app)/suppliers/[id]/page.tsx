@@ -1,10 +1,13 @@
 import { notFound } from "next/navigation";
 import { getDict } from "@/lib/i18n/server";
 import Link from "next/link";
-import { getSupplierDetail } from "@/server/services/balances.service";
+import { getSupplierDetail, getSupplierLedger } from "@/server/services/balances.service";
 import { formatIDR } from "@/lib/currency";
 import { LinkButton } from "@/components/ui/link-button";
+import { KartuLedger } from "@/components/contacts/kartu-ledger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DuePill } from "@/components/shared/due-pill";
+import { daysUntil } from "@/lib/due";
 import {
   Table,
   TableBody,
@@ -24,6 +27,7 @@ export default async function SupplierDetailPage({
   const { supplier, payable, purchases, payments, productSummary } =
     await getSupplierDetail(id);
   if (!supplier) notFound();
+  const ledger = await getSupplierLedger(id);
 
   return (
     <div className="space-y-6">
@@ -57,6 +61,13 @@ export default async function SupplierDetailPage({
         </CardHeader>
         <CardContent className="text-2xl font-semibold">{formatIDR(payable)}</CardContent>
       </Card>
+
+      <KartuLedger
+        title={dict.contacts.kartuHutang}
+        subtitle={`${dict.reports.companyName} · ${supplier.name}`}
+        entries={ledger.entries}
+        balance={ledger.balance}
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">{dict.contacts.productsSupplied}</h2>
@@ -95,6 +106,7 @@ export default async function SupplierDetailPage({
           <TableHeader>
             <TableRow>
               <TableHead>{dict.common.date}</TableHead>
+              <TableHead>{dict.contacts.dueColumn}</TableHead>
               <TableHead>{dict.common.reference}</TableHead>
               <TableHead>{dict.contacts.billedTo}</TableHead>
               <TableHead className="text-right">{dict.common.total}</TableHead>
@@ -111,6 +123,16 @@ export default async function SupplierDetailPage({
                     {p.date.toLocaleDateString("id-ID")}
                   </Link>
                 </TableCell>
+                <TableCell>
+                  {p.dueDate ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{p.dueDate.toLocaleDateString("id-ID")}</span>
+                      {payable > 0 && <DuePill days={daysUntil(p.dueDate)} />}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell>{p.reference || "—"}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {p.paymentAccount.code} — {p.paymentAccount.name}
@@ -120,7 +142,7 @@ export default async function SupplierDetailPage({
             ))}
             {purchases.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   {dict.contacts.noPurchasesYet}
                 </TableCell>
               </TableRow>

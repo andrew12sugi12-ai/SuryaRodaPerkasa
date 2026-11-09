@@ -127,6 +127,8 @@ export async function getIncomeStatement(startDate: Date, endDate: Date) {
   };
 }
 
+const AR_ACCOUNT_CODE = "1100";
+const CUSTOMER_ADVANCE_CODE = "2400"; // synthetic presentation line (reclassified from AR)
 const isCashBankCode = (code: string) => code.startsWith("10");
 const sumBalance = (rows: TrialBalanceRow[]) => rows.reduce((s, r) => s + r.balance, 0);
 
@@ -167,30 +169,82 @@ export async function getBalanceSheet(asOfDate: Date) {
   const startDate = earliestEntry?.date ?? asOfDate;
   const incomeStatement = await getIncomeStatement(startDate, asOfDate);
 
-  const totalAssets = sumBalance(assetRows);
-  const totalLiabilities = sumBalance(liabilityRows);
   const totalEquityAccounts = sumBalance(equityRows);
   const currentEarnings = incomeStatement.netIncome;
   const totalEquity = totalEquityAccounts + currentEarnings;
 
-  const isBalanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
-
   // Detail schedules: receivables per customer, payables per supplier.
-  const [receivablesDetail, payablesDetail] = await Promise.all([
+  const [receivablesRaw, payablesDetail] = await Promise.all([
     getReceivablesByCustomer(),
     getPayablesBySupplier(),
   ]);
+
+  // Reclassify customer credit balances (overpayments / advances) out of AR.
+  // A customer whose receipts exceed their invoices is money we owe them — an
+  // advance — so it belongs in liabilities as "Uang Muka Pelanggan", not netted
+  // against receivables as a negative AR (which hides it from the balance sheet).
+  const receivablesDetail = receivablesRaw.filter((c) => c.amount > 0);
+  const advancesDetail = receivablesRaw
+    .filter((c) => c.amount < 0)
+    .map((c) => ({ id: c.id, name: c.name, amount: -c.amount }));
+  const customerAdvances = advancesDetail.reduce((s, a) => s + a.amount, 0);
+
+  let customerAdvanceRows: TrialBalanceRow[] = [];
+  if (customerAdvances > 0.005) {
+    // Gross the AR asset back up by the advance amount so receivables are shown
+    // at their true (positive) value, with the advance moved to liabilities.
+    const arRow = otherCurrentAssetRows.find((r) => r.code === AR_ACCOUNT_CODE);
+    if (arRow) {
+      arRow.balance += customerAdvances;
+    } else {
+      const grossed: TrialBalanceRow = {
+        accountId: "synthetic-ar",
+        code: AR_ACCOUNT_CODE,
+        name: "Piutang Usaha",
+        type: AccountType.ASSET,
+        isLongTerm: false,
+        totalDebit: 0,
+        totalCredit: 0,
+        balance: customerAdvances,
+      };
+      otherCurrentAssetRows.push(grossed);
+      assetRows.push(grossed);
+    }
+    customerAdvanceRows = [
+      {
+        accountId: "synthetic-advance",
+        code: CUSTOMER_ADVANCE_CODE,
+        name: "Uang Muka Pelanggan",
+        type: AccountType.LIABILITY,
+        isLongTerm: false,
+        totalDebit: 0,
+        totalCredit: 0,
+        balance: customerAdvances,
+      },
+    ];
+  }
+
+  const currentLiabilityRowsAll = [...currentLiabilityRows, ...customerAdvanceRows];
+
+  // Recompute totals after the reclassification (assets and liabilities both
+  // rise by the advance amount, so the sheet stays balanced).
+  const totalCurrentAssetsAdj = cashBankTotal + sumBalance(otherCurrentAssetRows);
+  const totalAssets = sumBalance(assetRows);
+  const totalCurrentLiabilitiesAdj = sumBalance(currentLiabilityRowsAll);
+  const totalLiabilities = sumBalance(liabilityRows) + customerAdvances;
+
+  const isBalanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
 
   return {
     cashBankRows,
     cashBankTotal,
     otherCurrentAssetRows,
     longTermAssetRows,
-    totalCurrentAssets,
+    totalCurrentAssets: totalCurrentAssetsAdj,
     totalLongTermAssets,
-    currentLiabilityRows,
+    currentLiabilityRows: currentLiabilityRowsAll,
     longTermLiabilityRows,
-    totalCurrentLiabilities,
+    totalCurrentLiabilities: totalCurrentLiabilitiesAdj,
     totalLongTermLiabilities,
     equityRows,
     currentEarnings,
@@ -199,6 +253,8 @@ export async function getBalanceSheet(asOfDate: Date) {
     totalEquity,
     isBalanced,
     receivablesDetail,
+    advancesDetail,
+    customerAdvances,
     payablesDetail,
   };
 }

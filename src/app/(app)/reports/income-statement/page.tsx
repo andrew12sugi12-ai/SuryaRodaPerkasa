@@ -1,41 +1,74 @@
+import { Fragment } from "react";
 import { getIncomeStatement } from "@/server/services/reports.service";
 import { getDict } from "@/lib/i18n/server";
 import { formatIDR } from "@/lib/currency";
 import { DateFilter } from "@/components/reports/date-filter";
-import { Separator } from "@/components/ui/separator";
+import { PrintButton } from "@/components/reports/print-button";
+import { ExcelButton } from "@/components/reports/excel-button";
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+import { reportToday, reportFirstOfMonth } from "@/lib/report-dates";
+
+const todayISO = reportToday;
+const firstOfMonthISO = reportFirstOfMonth;
+
+function fmtDMY(iso: string) {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function firstOfMonthISO() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
+type Row = { code: string; name: string; amount: number };
 
-function ExpenseSection({
-  title,
-  rows,
-  total,
-}: {
-  title: string;
-  rows: { code: string; name: string; amount: number }[];
-  total: number;
-}) {
+function SectionHeader({ title }: { title: string }) {
   return (
-    <section>
-      <h2 className="mb-2 text-sm font-medium text-muted-foreground">{title}</h2>
-      {rows.map((r) => (
-        <div key={r.code} className="flex justify-between text-sm">
-          <span>{r.name}</span>
-          <span>{formatIDR(r.amount)}</span>
-        </div>
-      ))}
-      <div className="mt-1 flex justify-between text-sm font-medium">
-        <span>Total {title}</span>
-        <span>{formatIDR(total)}</span>
-      </div>
-    </section>
+    <tr>
+      <td colSpan={2} className="pt-4 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </td>
+    </tr>
+  );
+}
+
+function LineRow({ label, amount }: { label: string; amount: number }) {
+  return (
+    <tr>
+      <td className="py-1 pl-4">{label}</td>
+      <td className="py-1 text-right tabular-nums">{formatIDR(amount)}</td>
+    </tr>
+  );
+}
+
+function SubtotalRow({ label, amount }: { label: string; amount: number }) {
+  return (
+    <tr className="border-t">
+      <td className="py-1.5 font-medium">{label}</td>
+      <td className="py-1.5 text-right font-medium tabular-nums">{formatIDR(amount)}</td>
+    </tr>
+  );
+}
+
+function TotalRow({
+  label,
+  amount,
+  color,
+  big,
+}: {
+  label: string;
+  amount: number;
+  color?: boolean;
+  big?: boolean;
+}) {
+  const amountCls = color
+    ? amount >= 0
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-red-600 dark:text-red-400"
+    : "";
+  return (
+    <tr className="border-t-2 border-foreground/30">
+      <td className={`py-2 font-semibold ${big ? "text-base" : ""}`}>{label}</td>
+      <td className={`py-2 text-right font-semibold tabular-nums ${big ? "text-base" : ""} ${amountCls}`}>
+        {formatIDR(amount)}
+      </td>
+    </tr>
   );
 }
 
@@ -45,88 +78,73 @@ export default async function IncomeStatementPage({
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
   const dict = await getDict();
+  const t = dict.reports;
   const params = await searchParams;
   const start = params.start ?? firstOfMonthISO();
   const end = params.end ?? todayISO();
   const startDate = new Date(`${start}T00:00:00`);
   const endDate = new Date(`${end}T23:59:59`);
 
-  const statement = await getIncomeStatement(startDate, endDate);
+  const s = await getIncomeStatement(startDate, endDate);
+
+  const expenseGroups: { title: string; rows: Row[]; total: number }[] = [
+    { title: t.expOperational, rows: s.operationalRows, total: s.operationalTotal },
+    { title: t.expFixed, rows: s.fixedRows, total: s.fixedTotal },
+    { title: t.expSales, rows: s.salesExpenseRows, total: s.salesExpenseTotal },
+    { title: t.expOther, rows: s.otherRows, total: s.otherTotal },
+  ].filter((g) => g.rows.length > 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">{dict.reports.incomeStatementTitle}</h1>
-        <div className="flex gap-3">
-          <DateFilter paramName="start" label={dict.reports.from} defaultValue={firstOfMonthISO()} />
-          <DateFilter paramName="end" label={dict.reports.to} defaultValue={todayISO()} />
+      <div className="flex items-center justify-between no-print">
+        <h1 className="text-2xl font-semibold tracking-tight">{t.incomeStatementTitle}</h1>
+        <div className="flex items-end gap-3">
+          <DateFilter paramName="start" label={t.from} defaultValue={firstOfMonthISO()} />
+          <DateFilter paramName="end" label={t.to} defaultValue={todayISO()} />
+          <ExcelButton href={`/api/reports/export?type=income&start=${start}&end=${end}`} />
+          <PrintButton />
         </div>
       </div>
 
-      <div className="max-w-xl space-y-4 rounded-md border p-6">
-        <section>
-          <h2 className="mb-2 text-sm font-medium text-muted-foreground">{dict.reports.revenue}</h2>
-          {statement.revenueRows.map((r) => (
-            <div key={r.code} className="flex justify-between text-sm">
-              <span>{r.name}</span>
-              <span>{formatIDR(r.amount)}</span>
-            </div>
-          ))}
-          <div className="mt-1 flex justify-between text-sm font-medium">
-            <span>{dict.reports.totalRevenue}</span>
-            <span>{formatIDR(statement.revenue)}</span>
-          </div>
-        </section>
-
-        <Separator />
-
-        <ExpenseSection
-          title={dict.reports.cogsSection}
-          rows={statement.cogsRows}
-          total={statement.cogs}
-        />
-
-        <Separator />
-
-        <div className="flex justify-between font-medium">
-          <span>{dict.reports.grossProfit}</span>
-          <span>{formatIDR(statement.grossProfit)}</span>
+      <div className="mx-auto max-w-2xl rounded-xl border bg-card p-6">
+        <div className="mb-3 border-b pb-3 text-center">
+          <p className="text-base font-semibold">{t.companyName}</p>
+          <p className="text-sm font-medium">{t.incomeStatementTitle}</p>
+          <p className="text-xs text-muted-foreground">
+            {fmtDMY(start)} – {fmtDMY(end)}
+          </p>
         </div>
 
-        <Separator />
+        <table className="w-full text-sm">
+          <tbody>
+            <SectionHeader title={t.revenue} />
+            {s.revenueRows.map((r) => (
+              <LineRow key={r.code} label={r.name} amount={r.amount} />
+            ))}
+            <SubtotalRow label={t.totalRevenue} amount={s.revenue} />
 
-        <ExpenseSection
-          title="B. Operasional"
-          rows={statement.operationalRows}
-          total={statement.operationalTotal}
-        />
-        <ExpenseSection
-          title="B. Tetap"
-          rows={statement.fixedRows}
-          total={statement.fixedTotal}
-        />
-        <ExpenseSection
-          title="B. Sales"
-          rows={statement.salesExpenseRows}
-          total={statement.salesExpenseTotal}
-        />
-        <ExpenseSection
-          title="B. Lain-Lain"
-          rows={statement.otherRows}
-          total={statement.otherTotal}
-        />
+            <SectionHeader title={t.cogsSection} />
+            {s.cogsRows.map((r) => (
+              <LineRow key={r.code} label={r.name} amount={r.amount} />
+            ))}
+            <SubtotalRow label={`Total ${t.cogsSection}`} amount={s.cogs} />
 
-        <Separator />
+            <TotalRow label={t.grossProfit} amount={s.grossProfit} color />
 
-        <div className="flex justify-between text-sm font-medium">
-          <span>{dict.reports.totalExpenses}</span>
-          <span>{formatIDR(statement.operatingExpenses)}</span>
-        </div>
+            {expenseGroups.map((g) => (
+              <Fragment key={g.title}>
+                <SectionHeader title={g.title} />
+                {g.rows.map((r) => (
+                  <LineRow key={r.code} label={r.name} amount={r.amount} />
+                ))}
+                <SubtotalRow label={`Total ${g.title}`} amount={g.total} />
+              </Fragment>
+            ))}
 
-        <div className="flex justify-between text-lg font-semibold">
-          <span>{dict.reports.netIncome}</span>
-          <span>{formatIDR(statement.netIncome)}</span>
-        </div>
+            <SubtotalRow label={t.totalExpenses} amount={s.operatingExpenses} />
+            <TotalRow label={t.netIncome} amount={s.netIncome} color big />
+          </tbody>
+        </table>
       </div>
     </div>
   );

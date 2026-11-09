@@ -33,6 +33,7 @@ export default async function EditPurchasePage({
         products={products.map((p) => ({ id: p.id, label: `${p.sku} — ${p.name}` }))}
         defaultValues={{
           date: purchase.date,
+          dueDate: purchase.dueDate ?? undefined,
           supplierId: purchase.supplierId,
           paymentAccountId: purchase.paymentAccountId,
           reference: purchase.reference ?? "",

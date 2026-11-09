@@ -86,6 +86,9 @@ export async function updateJournalEntry(
   if (existing.sourceType === "ADJUSTMENT") {
     throw new Error("Stock adjustment entries cannot be edited — record a new adjustment.");
   }
+  if (existing.sourceType === "LANDED_COST") {
+    throw new Error("Landed-cost entries cannot be edited — record a new landed cost adjustment.");
+  }
 
   await assertPeriodOpen(input.date, input.createdById);
 

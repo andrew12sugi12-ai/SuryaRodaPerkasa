@@ -27,6 +27,7 @@ export default async function SalesPage() {
         <TableHeader>
           <TableRow>
             <TableHead>{dict.common.date}</TableHead>
+            <TableHead>{dict.contacts.dueDate}</TableHead>
             <TableHead>{dict.sales.customer}</TableHead>
             <TableHead>{dict.common.reference}</TableHead>
             <TableHead className="text-right">{dict.common.total}</TableHead>
@@ -41,6 +42,7 @@ export default async function SalesPage() {
                   {sale.date.toLocaleDateString("id-ID")}
                 </Link>
               </TableCell>
+              <TableCell>{sale.dueDate ? sale.dueDate.toLocaleDateString("id-ID") : "—"}</TableCell>
               <TableCell>
                 <Link href={`/sales/${sale.id}`} className="block">
                   {sale.customer.name}
@@ -53,7 +55,7 @@ export default async function SalesPage() {
           ))}
           {sales.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 {dict.sales.noSales}
               </TableCell>
             </TableRow>

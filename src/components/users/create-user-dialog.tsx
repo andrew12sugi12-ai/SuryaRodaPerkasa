@@ -89,7 +89,7 @@ export function CreateUserDialog() {
                 <FormItem>
                   <FormLabel>{dict.common.email}</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="name@indocycle.com" {...field} />
+                    <Input type="email" placeholder="name@suryaroda.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

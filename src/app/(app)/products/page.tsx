@@ -28,7 +28,12 @@ export default async function ProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">{dict.products.title}</h1>
-        <LinkButton href="/products/new">{dict.products.newProduct}</LinkButton>
+        <div className="flex gap-2">
+          <LinkButton href="/reports/inventory" variant="outline">
+            {dict.reports.downloadPdf}
+          </LinkButton>
+          <LinkButton href="/products/new">{dict.products.newProduct}</LinkButton>
+        </div>
       </div>
 
       <Table>

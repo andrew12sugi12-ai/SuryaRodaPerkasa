@@ -23,6 +23,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
   SelectContent,
@@ -121,13 +122,7 @@ export function ExpenseForm({ accounts }: { accounts: Option[] }) {
             <FormItem>
               <FormLabel>{dict.common.amount}</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
-                  min="0"
-                  className="text-right"
-                  {...field}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
-                />
+                <CurrencyInput value={field.value} onValueChange={(v) => field.onChange(v ?? 0)} />
               </FormControl>
               <FormMessage />
             </FormItem>

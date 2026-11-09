@@ -2,7 +2,9 @@ import type { NextAuthConfig } from "next-auth";
 
 export const authConfig = {
   trustHost: true,
-  session: { strategy: "jwt" },
+  // Shorter sessions for a finance app: a stale browser on a shared PC
+  // should not stay logged in for weeks. 1 day, refreshed on activity.
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24, updateAge: 60 * 60 },
   pages: { signIn: "/login" },
   providers: [],
   callbacks: {

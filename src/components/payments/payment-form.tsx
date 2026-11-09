@@ -20,6 +20,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ export function PaymentForm({
   defaultType,
   defaultCustomerId,
   defaultSupplierId,
+  receivableByCustomer,
 }: {
   customers: Option[];
   suppliers: Option[];
@@ -44,6 +46,8 @@ export function PaymentForm({
   defaultType?: "CUSTOMER_RECEIPT" | "SUPPLIER_PAYMENT";
   defaultCustomerId?: string;
   defaultSupplierId?: string;
+  /** customerId -> current outstanding receivable, for the overpayment warning. */
+  receivableByCustomer?: Record<string, number>;
 }) {
   const router = useRouter();
   const { dict } = useI18n();
@@ -54,6 +58,7 @@ export function PaymentForm({
     defaultValues: {
       date: new Date(),
       type: defaultType ?? "CUSTOMER_RECEIPT",
+      method: "TRANSFER",
       customerId: defaultCustomerId ?? "",
       supplierId: defaultSupplierId ?? "",
       accountId: "",
@@ -64,7 +69,27 @@ export function PaymentForm({
   });
 
   const type = form.watch("type");
+  const method = form.watch("method");
+  const isGiro = method === "GIRO" || method === "CEK";
   const amount = form.watch("amount");
+  const discount = form.watch("discount");
+  const canDiscount = type === "CUSTOMER_RECEIPT" && !isGiro;
+  const cashAmount = form.watch("cashAmount");
+  // FX difference preview: settle amount vs. actual cash moved.
+  const fxDiff =
+    cashAmount && cashAmount > 0 && amount > 0
+      ? type === "SUPPLIER_PAYMENT"
+        ? amount - cashAmount
+        : cashAmount - amount
+      : 0;
+
+  const customerId = form.watch("customerId");
+  // Overpayment detection: a customer receipt larger than what they owe creates
+  // an advance (Uang Muka Pelanggan). Warn so it is never accidental.
+  const outstanding =
+    type === "CUSTOMER_RECEIPT" && customerId ? receivableByCustomer?.[customerId] : undefined;
+  const overpayExcess =
+    outstanding !== undefined && (amount || 0) > outstanding ? (amount || 0) - outstanding : 0;
 
   const customerItems = Object.fromEntries(customers.map((c) => [c.id, c.label]));
   const supplierItems = Object.fromEntries(suppliers.map((s) => [s.id, s.label]));
@@ -73,6 +98,7 @@ export function PaymentForm({
     CUSTOMER_RECEIPT: dict.payments.receiveFromCustomer,
     SUPPLIER_PAYMENT: dict.payments.paySupplier,
   };
+  const methodItems = dict.payments.methodLabels;
 
   async function onSubmit(values: PaymentInput) {
     setIsSubmitting(true);
@@ -112,6 +138,78 @@ export function PaymentForm({
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="method"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{dict.payments.method}</FormLabel>
+              <Select items={methodItems} value={field.value} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="CASH">{methodItems.CASH}</SelectItem>
+                  <SelectItem value="TRANSFER">{methodItems.TRANSFER}</SelectItem>
+                  <SelectItem value="GIRO">{methodItems.GIRO}</SelectItem>
+                  <SelectItem value="CEK">{methodItems.CEK}</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {isGiro && (
+          <div className="grid gap-4 rounded-md border border-dashed p-4 sm:grid-cols-3">
+            <FormField
+              control={form.control}
+              name="instrumentNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.payments.instrumentNumber}</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="instrumentBank"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.payments.instrumentBank}</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="dueDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{dict.payments.giroDueDate}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : ""}
+                      onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
 
         {type === "CUSTOMER_RECEIPT" ? (
           <FormField
@@ -173,7 +271,7 @@ export function PaymentForm({
           />
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-2 items-start gap-4">
           <FormField
             control={form.control}
             name="date"
@@ -202,20 +300,51 @@ export function PaymentForm({
               <FormItem>
                 <FormLabel>{dict.common.amount}</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    min="0"
-                    className="text-right"
-                    {...field}
-                    onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
-                  />
+                  <CurrencyInput value={field.value} onValueChange={(v) => field.onChange(v ?? 0)} />
                 </FormControl>
-                <p className="text-xs text-muted-foreground">{formatIDR(amount || 0)}</p>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
+        {overpayExcess > 0 && (
+          <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+            <p className="font-medium text-warning">Melebihi sisa piutang</p>
+            <p className="text-muted-foreground">
+              Sisa piutang {formatIDR(outstanding ?? 0)}. Kelebihan{" "}
+              <span className="font-medium text-foreground">{formatIDR(overpayExcess)}</span> akan
+              dicatat sebagai Uang Muka Pelanggan (titipan) dan otomatis dipakai untuk transaksi
+              berikutnya.
+            </p>
+          </div>
+        )}
+
+        {canDiscount && (
+          <FormField
+            control={form.control}
+            name="discount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.payments.discount}</FormLabel>
+                <FormControl>
+                  <CurrencyInput
+                    className="max-w-xs"
+                    value={field.value}
+                    onValueChange={(v) => field.onChange(v)}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">{dict.payments.discountHint}</p>
+                {(discount ?? 0) > 0 && (
+                  <p className="text-xs font-medium">
+                    {dict.payments.netReceived}: {formatIDR(Math.max(0, (amount || 0) - (discount || 0)))}
+                  </p>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}
@@ -239,10 +368,39 @@ export function PaymentForm({
                   ))}
                 </SelectContent>
               </Select>
+              {isGiro && type === "CUSTOMER_RECEIPT" && (
+                <p className="text-xs text-muted-foreground">{dict.payments.depositBankHint}</p>
+              )}
               <FormMessage />
             </FormItem>
           )}
         />
+
+        {type === "SUPPLIER_PAYMENT" && !isGiro && (
+          <FormField
+            control={form.control}
+            name="cashAmount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.payments.cashAmount}</FormLabel>
+                <FormControl>
+                  <CurrencyInput
+                    className="max-w-xs"
+                    value={field.value}
+                    onValueChange={(v) => field.onChange(v)}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">{dict.payments.cashAmountHelp}</p>
+                {fxDiff !== 0 && (
+                  <p className={`text-xs font-medium ${fxDiff > 0 ? "text-green-600" : "text-red-600"}`}>
+                    {fxDiff > 0 ? dict.payments.fxGain : dict.payments.fxLoss}: {formatIDR(Math.abs(fxDiff))}
+                  </p>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField

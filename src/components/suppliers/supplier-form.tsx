@@ -47,6 +47,7 @@ export function SupplierForm({
       email: "",
       address: "",
       isActive: true,
+      openingBalance: 0,
     },
   });
 
@@ -137,6 +138,28 @@ export function SupplierForm({
             </FormItem>
           )}
         />
+        {!supplierId && (
+          <FormField
+            control={form.control}
+            name="openingBalance"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.contacts.openingPayable}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={field.value ?? 0}
+                    onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">{dict.contacts.openingBalanceHelp}</p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
         <FormField
           control={form.control}
           name="isActive"

@@ -1,12 +1,34 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatIDR } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { getAccountBalance, listCashBankAccounts } from "@/server/services/accounts.service";
 import { getInventoryValue } from "@/server/services/products.service";
 import { listJournalEntries } from "@/server/services/journal.service";
+import {
+  getMonthlyRevenue,
+  getUpcomingInvoices,
+  getPendingGiroList,
+} from "@/server/services/dashboard.service";
+import { RevenueBarChart } from "@/components/dashboard/revenue-bar-chart";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getDict } from "@/lib/i18n/server";
+import { Wallet, ArrowDownLeft, ArrowUpRight, Boxes, TrendingUp, CalendarClock, FileCheck, type LucideIcon } from "lucide-react";
+
+function DuePill({ days, dict }: { days: number | null; dict: Record<string, string> }) {
+  if (days === null) return <span className="text-xs text-muted-foreground">—</span>;
+  let cls = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  let text = dict.dueIn.replace("{n}", String(days));
+  if (days < 0) {
+    cls = "bg-red-500/10 text-red-600 dark:text-red-400";
+    text = dict.overdueBy.replace("{n}", String(Math.abs(days)));
+  } else if (days === 0) {
+    cls = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    text = dict.dueToday;
+  } else if (days <= 7) {
+    cls = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+  }
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{text}</span>;
+}
 import {
   Table,
   TableBody,
@@ -16,6 +38,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  tint,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  tint: string;
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-start justify-between">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <div className={`flex size-9 items-center justify-center rounded-lg ${tint}`}>
+          <Icon className="size-5" />
+        </div>
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+    </div>
+  );
+}
 
 async function getAccountTotal(code: string) {
   const account = await prisma.account.findUnique({ where: { code } });
@@ -36,13 +82,23 @@ export default async function DashboardPage() {
   );
   const totalCashBank = cashBankBalances.reduce((sum, b) => sum + b.balance, 0);
 
-  const [accountsReceivable, accountsPayable, inventoryValue, recentEntries] =
-    await Promise.all([
-      getAccountTotal("1100"),
-      getAccountTotal("2000"),
-      getInventoryValue(),
-      listJournalEntries(),
-    ]);
+  const [
+    accountsReceivable,
+    accountsPayable,
+    inventoryValue,
+    recentEntries,
+    monthlyRevenue,
+    upcomingInvoices,
+    pendingGiros,
+  ] = await Promise.all([
+    getAccountTotal("1100"),
+    getAccountTotal("2000"),
+    getInventoryValue(),
+    listJournalEntries(),
+    getMonthlyRevenue(12),
+    getUpcomingInvoices(30, 7),
+    getPendingGiroList(7),
+  ]);
 
   const latestEntries = recentEntries.slice(0, 5);
   const nonZeroBalances = cashBankBalances.filter((b) => b.balance !== 0);
@@ -51,51 +107,88 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">{t.title}</h1>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t.cashBank}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {formatIDR(totalCashBank)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t.receivables}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {formatIDR(accountsReceivable)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t.payables}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {formatIDR(accountsPayable)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t.inventoryValue}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {formatIDR(inventoryValue)}
-          </CardContent>
-        </Card>
+        <StatCard
+          label={t.cashBank}
+          value={formatIDR(totalCashBank)}
+          icon={Wallet}
+          tint="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+        />
+        <StatCard
+          label={t.receivables}
+          value={formatIDR(accountsReceivable)}
+          icon={ArrowDownLeft}
+          tint="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+        />
+        <StatCard
+          label={t.payables}
+          value={formatIDR(accountsPayable)}
+          icon={ArrowUpRight}
+          tint="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        />
+        <StatCard
+          label={t.inventoryValue}
+          value={formatIDR(inventoryValue)}
+          icon={Boxes}
+          tint="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+        />
+      </div>
+
+      <div className="rounded-xl border bg-card p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <TrendingUp className="size-4 text-muted-foreground" />
+          <h2 className="text-base font-medium">{t.revenueTrend}</h2>
+        </div>
+        <RevenueBarChart data={monthlyRevenue} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">{t.cashBankBreakdown}</h2>
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="size-4 text-muted-foreground" />
+            <h2 className="text-base font-medium">{t.upcomingInvoices}</h2>
+          </div>
+          <div className="-mx-4 border-t">
+            {upcomingInvoices.length === 0 && (
+              <p className="p-4 text-sm text-muted-foreground">{t.noUpcoming}</p>
+            )}
+            {upcomingInvoices.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between border-b px-4 py-2.5 text-sm last:border-b-0">
+                <div className="flex items-center gap-2">
+                  <span className="max-w-40 truncate">{inv.customer}</span>
+                  <DuePill days={inv.days} dict={t as unknown as Record<string, string>} />
+                </div>
+                <span className="font-medium">{formatIDR(inv.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <FileCheck className="size-4 text-muted-foreground" />
+            <h2 className="text-base font-medium">{t.pendingGiros}</h2>
+          </div>
+          <div className="-mx-4 border-t">
+            {pendingGiros.length === 0 && (
+              <p className="p-4 text-sm text-muted-foreground">{t.noPendingGiros}</p>
+            )}
+            {pendingGiros.map((g) => (
+              <div key={g.id} className="flex items-center justify-between border-b px-4 py-2.5 text-sm last:border-b-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{g.number}</span>
+                  <span className="max-w-32 truncate">{g.customer}</span>
+                  <DuePill days={g.days} dict={t as unknown as Record<string, string>} />
+                </div>
+                <span className="font-medium">{formatIDR(g.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <h2 className="text-base font-medium">{t.cashBankBreakdown}</h2>
           <Table>
             <TableHeader>
               <TableRow>
@@ -131,9 +224,9 @@ export default async function DashboardPage() {
           </Table>
         </div>
 
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">{t.recentEntries}</h2>
-          <div className="rounded-md border">
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <h2 className="text-base font-medium">{t.recentEntries}</h2>
+          <div className="-mx-4 -mb-4 border-t">
             {latestEntries.length === 0 && (
               <p className="p-4 text-sm text-muted-foreground">{t.noEntries}</p>
             )}

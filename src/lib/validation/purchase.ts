@@ -8,6 +8,8 @@ export const purchaseLineSchema = z.object({
 
 export const purchaseSchema = z.object({
   date: z.date(),
+  // Jatuh tempo — when this purchase's payment is due. Optional (cash purchases).
+  dueDate: z.date().optional(),
   supplierId: z.string().min(1, "Supplier is required"),
   paymentAccountId: z.string().min(1, "Payment account is required"),
   reference: z.string().optional(),

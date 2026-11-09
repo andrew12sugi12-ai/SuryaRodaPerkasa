@@ -14,6 +14,7 @@ import { updatePurchaseAction } from "@/server/actions/admin.actions";
 import { formatIDR } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Form,
   FormControl,
@@ -95,7 +96,7 @@ export function PurchaseForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-5">
           <FormField
             control={form.control}
             name="date"
@@ -111,6 +112,29 @@ export function PurchaseForm({
                         : field.value
                     }
                     onChange={(e) => field.onChange(new Date(e.target.value))}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="dueDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{dict.contacts.dueDate}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    value={
+                      field.value instanceof Date
+                        ? field.value.toISOString().slice(0, 10)
+                        : ""
+                    }
+                    onChange={(e) =>
+                      field.onChange(e.target.value ? new Date(e.target.value) : undefined)
+                    }
                   />
                 </FormControl>
                 <FormMessage />
@@ -237,14 +261,7 @@ export function PurchaseForm({
                       control={form.control}
                       name={`lines.${index}.unitCost`}
                       render={({ field: f }) => (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="text-right"
-                          {...f}
-                          onChange={(e) => f.onChange(e.target.valueAsNumber || 0)}
-                        />
+                        <CurrencyInput value={f.value} onValueChange={(v) => f.onChange(v ?? 0)} />
                       )}
                     />
                   </TableCell>

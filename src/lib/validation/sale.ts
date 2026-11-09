@@ -8,7 +8,10 @@ export const saleLineSchema = z.object({
 
 export const saleSchema = z.object({
   date: z.date(),
+  // Jatuh tempo — when this sale's payment is due. Optional (cash sales).
+  dueDate: z.date().optional(),
   customerId: z.string().min(1, "Customer is required"),
+  salesmanId: z.string().optional().or(z.literal("")),
   paymentAccountId: z.string().min(1, "Payment account is required"),
   reference: z.string().optional(),
   lines: z.array(saleLineSchema).min(1, "At least one line is required"),

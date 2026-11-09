@@ -27,6 +27,7 @@ export default async function PurchasesPage() {
         <TableHeader>
           <TableRow>
             <TableHead>{dict.common.date}</TableHead>
+            <TableHead>{dict.contacts.dueDate}</TableHead>
             <TableHead>{dict.purchases.supplier}</TableHead>
             <TableHead>{dict.common.reference}</TableHead>
             <TableHead className="text-right">{dict.common.total}</TableHead>
@@ -41,6 +42,9 @@ export default async function PurchasesPage() {
                 </Link>
               </TableCell>
               <TableCell>
+                {purchase.dueDate ? purchase.dueDate.toLocaleDateString("id-ID") : "—"}
+              </TableCell>
+              <TableCell>
                 <Link href={`/purchases/${purchase.id}`} className="block">
                   {purchase.supplier.name}
                 </Link>
@@ -51,7 +55,7 @@ export default async function PurchasesPage() {
           ))}
           {purchases.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
                 {dict.purchases.noPurchases}
               </TableCell>
             </TableRow>

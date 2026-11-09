@@ -2,6 +2,7 @@ import { getTrialBalance } from "@/server/services/reports.service";
 import { getDict } from "@/lib/i18n/server";
 import { formatIDR } from "@/lib/currency";
 import { DateFilter } from "@/components/reports/date-filter";
+import { PrintButton } from "@/components/reports/print-button";
 import {
   Table,
   TableBody,
@@ -12,9 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { reportToday } from "@/lib/report-dates";
+
+const todayISO = reportToday;
 
 export default async function TrialBalancePage({
   searchParams,
@@ -30,11 +31,15 @@ export default async function TrialBalancePage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between no-print">
         <h1 className="text-2xl font-semibold tracking-tight">{dict.reports.trialBalanceTitle}</h1>
-        <DateFilter paramName="asOf" label={dict.reports.asOf} defaultValue={todayISO()} />
+        <div className="flex items-end gap-3">
+          <DateFilter paramName="asOf" label={dict.reports.asOf} defaultValue={todayISO()} />
+          <PrintButton />
+        </div>
       </div>
 
+      <div className="rounded-xl border bg-card p-4">
       <Table>
         <TableHeader>
           <TableRow>
@@ -68,10 +73,17 @@ export default async function TrialBalancePage({
           </TableRow>
         </TableFooter>
       </Table>
+      </div>
 
-      <p className={isBalanced ? "text-sm text-green-600" : "text-sm text-destructive"}>
+      <span
+        className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
+          isBalanced
+            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+            : "bg-red-500/10 text-red-600 dark:text-red-400"
+        }`}
+      >
         {isBalanced ? dict.reports.booksBalanced : dict.reports.booksNotBalanced}
-      </p>
+      </span>
     </div>
   );
 }

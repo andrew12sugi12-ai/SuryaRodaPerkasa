@@ -33,6 +33,18 @@ export async function listSettlementAccounts(kind: "sale" | "purchase") {
   });
 }
 
+// Accounts a landed-cost (bea masuk) bill can be settled against: any cash/bank
+// account, or any liability account (e.g. Hutang Bea Cukai, Hutang Dagang).
+export async function listLandedCostOffsetAccounts() {
+  return prisma.account.findMany({
+    where: {
+      isActive: true,
+      OR: [{ type: "ASSET", code: { startsWith: "10" } }, { type: "LIABILITY" }],
+    },
+    orderBy: { code: "asc" },
+  });
+}
+
 export async function getAccount(id: string) {
   return prisma.account.findUnique({ where: { id } });
 }

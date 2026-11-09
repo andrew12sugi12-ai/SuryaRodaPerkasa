@@ -9,7 +9,9 @@ const COGS_ACCOUNT_CODE = "5000";
 
 export type RecordSaleInput = {
   date: Date;
+  dueDate?: Date | null;
   customerId: string;
+  salesmanId?: string | null;
   paymentAccountId: string;
   reference?: string | null;
   createdById: string;
@@ -129,7 +131,9 @@ export async function recordSaleTx(tx: Tx, input: RecordSaleInput) {
   return tx.sale.create({
     data: {
       date: input.date,
+      dueDate: input.dueDate ?? null,
       customerId: input.customerId,
+      salesmanId: input.salesmanId ? input.salesmanId : null,
       paymentAccountId: input.paymentAccountId,
       reference: input.reference,
       totalAmount,
@@ -167,6 +171,7 @@ export async function getSale(id: string) {
     where: { id },
     include: {
       customer: true,
+      salesman: true,
       paymentAccount: true,
       revenueJournalEntry: { include: { lines: { include: { account: true } } } },
       cogsJournalEntry: { include: { lines: { include: { account: true } } } },

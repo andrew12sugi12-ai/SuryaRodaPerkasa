@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Fraunces, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/components/i18n-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Body / UI / all numbers — clean neutral sans.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+});
+
+// Display / headings only — warm editorial serif (never used for figures).
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -16,8 +25,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Indocycle Ledger",
-  description: "Accounting ledger for Indocycle",
+  title: "PT Surya Roda Perkasa Ledger",
+  description: "Accounting ledger for PT Surya Roda Perkasa",
 };
 
 export default async function RootLayout({
@@ -30,13 +39,16 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${inter.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <I18nProvider locale={locale}>
-          {children}
-          <Toaster />
-        </I18nProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <I18nProvider locale={locale}>
+            {children}
+            <Toaster />
+          </I18nProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

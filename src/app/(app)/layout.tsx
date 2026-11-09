@@ -12,10 +12,16 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-1">
-      <Sidebar isAdmin={user?.role === "ADMIN"} />
+      <div className="print:hidden">
+        <Sidebar isAdmin={user?.role === "ADMIN"} />
+      </div>
       <div className="flex flex-1 flex-col">
-        <Header userName={user?.name ?? ""} userRole={user?.role ?? ""} />
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <div className="print:hidden">
+          <Header userName={user?.name ?? ""} userRole={user?.role ?? ""} />
+        </div>
+        <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">
+          {children}
+        </main>
       </div>
     </div>
   );

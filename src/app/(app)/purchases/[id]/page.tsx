@@ -36,6 +36,9 @@ export default async function PurchaseDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
+          <LinkButton href={`/purchases/${purchase.id}/landed-cost`} variant="outline" size="sm">
+            {dict.landedCost.addButton}
+          </LinkButton>
           <LinkButton href={`/purchases/${purchase.id}/edit`} variant="outline" size="sm">
             {dict.common.edit}
           </LinkButton>
@@ -49,6 +52,11 @@ export default async function PurchaseDetailPage({
 
       {purchase.reference && (
         <p className="text-sm text-muted-foreground">{dict.common.reference}: {purchase.reference}</p>
+      )}
+      {purchase.dueDate && (
+        <p className="text-sm text-muted-foreground">
+          {dict.contacts.dueDate}: {purchase.dueDate.toLocaleDateString("id-ID")}
+        </p>
       )}
 
       <Table>

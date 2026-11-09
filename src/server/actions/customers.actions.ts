@@ -12,9 +12,9 @@ async function requireUser() {
 }
 
 export async function createCustomerAction(input: CustomerInput) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = customerSchema.parse(input);
-  const customer = await customersService.createCustomer(parsed);
+  const customer = await customersService.createCustomer(parsed, user.id);
   revalidatePath("/customers");
   return customer;
 }
