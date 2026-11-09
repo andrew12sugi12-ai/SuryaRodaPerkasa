@@ -15,6 +15,9 @@ export async function resetAllData(adminId: string) {
     await tx.payment.deleteMany({});
     await tx.journalLine.deleteMany({});
     await tx.journalEntry.deleteMany({});
+    // Bike bill-of-materials links reference products (componentId is ON DELETE
+    // RESTRICT), so they must go before the products themselves.
+    await tx.productComponent.deleteMany({});
     await tx.product.deleteMany({});
     await tx.customer.deleteMany({});
     await tx.supplier.deleteMany({});
