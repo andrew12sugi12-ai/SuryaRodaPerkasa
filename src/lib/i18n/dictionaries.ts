@@ -191,6 +191,19 @@ export const en = {
     addComponent: "Add component",
     removeComponent: "Remove component",
     buildable: "can build",
+    dangerZone: "Danger zone",
+    deleteProduct: "Delete this product",
+    deleteProductHelp:
+      "Permanently removes this product. Only possible if it has never been bought or sold. This cannot be undone.",
+    deleteConfirmPrompt: "To confirm, type the SKU below:",
+    deleteConfirmPlaceholder: "Type {sku} to enable delete",
+    deleteButton: "Delete permanently",
+    deleting: "Deleting…",
+    productDeleted: "Product deleted",
+    deleteBlockedHistory:
+      "Cannot delete: this product has purchase or sales history. Set it to Inactive instead.",
+    deleteBlockedComponent:
+      "Cannot delete: this product is used in one or more bikes. Remove it from those bikes first.",
   },
   purchases: {
     title: "Purchases",
@@ -829,6 +842,19 @@ export const id: Dict = {
     addComponent: "Tambah komponen",
     removeComponent: "Hapus komponen",
     buildable: "bisa dirakit",
+    dangerZone: "Zona berbahaya",
+    deleteProduct: "Hapus produk ini",
+    deleteProductHelp:
+      "Menghapus produk ini secara permanen. Hanya bisa jika belum pernah dibeli atau dijual. Tindakan ini tidak dapat dibatalkan.",
+    deleteConfirmPrompt: "Untuk mengonfirmasi, ketik SKU di bawah ini:",
+    deleteConfirmPlaceholder: "Ketik {sku} untuk mengaktifkan hapus",
+    deleteButton: "Hapus permanen",
+    deleting: "Menghapus…",
+    productDeleted: "Produk dihapus",
+    deleteBlockedHistory:
+      "Tidak bisa dihapus: produk ini punya riwayat pembelian atau penjualan. Jadikan Tidak Aktif saja.",
+    deleteBlockedComponent:
+      "Tidak bisa dihapus: produk ini dipakai di satu atau lebih sepeda. Lepaskan dari sepeda tersebut dulu.",
   },
   purchases: {
     title: "Pembelian",

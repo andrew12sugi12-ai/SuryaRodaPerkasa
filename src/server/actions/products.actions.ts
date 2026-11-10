@@ -27,3 +27,11 @@ export async function updateProductAction(id: string, input: ProductInput) {
   revalidatePath("/products");
   return { id: product.id };
 }
+
+export async function deleteProductAction(id: string) {
+  await requireUser();
+  await productsService.deleteProduct(id);
+  revalidatePath("/products");
+  revalidatePath("/journal-entries");
+  return { ok: true };
+}

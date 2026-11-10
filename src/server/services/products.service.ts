@@ -146,6 +146,42 @@ export async function updateProduct(id: string, input: ProductInput) {
   });
 }
 
+// Permanently remove a product. Refuses when deleting would corrupt the books:
+// a product with any purchase/sale/return history is kept (use Inactive), and a
+// part still used in a bike must be detached first. A finished bike's own
+// bill-of-materials rows are cleared as part of the delete.
+export async function deleteProduct(id: string) {
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            purchaseLines: true,
+            saleLines: true,
+            salesReturnLines: true,
+            usedInBikes: true,
+          },
+        },
+      },
+    });
+    if (!product) throw new Error("Product not found");
+
+    const { purchaseLines, saleLines, salesReturnLines, usedInBikes } = product._count;
+    if (purchaseLines + saleLines + salesReturnLines > 0) {
+      throw new Error("DELETE_BLOCKED_HISTORY");
+    }
+    if (usedInBikes > 0) {
+      throw new Error("DELETE_BLOCKED_COMPONENT");
+    }
+
+    // Clear this bike's own bill of materials, then remove the product.
+    await tx.productComponent.deleteMany({ where: { bikeId: id } });
+    await tx.product.delete({ where: { id } });
+  });
+}
+
 export async function getInventoryValue() {
   const products = await prisma.product.findMany();
   return products.reduce(

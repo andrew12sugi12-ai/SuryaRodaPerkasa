@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getDict } from "@/lib/i18n/server";
 import { getProduct, listComponentCandidates } from "@/server/services/products.service";
 import { ProductForm } from "@/components/products/product-form";
+import { DeleteProductDialog } from "@/components/products/delete-product-dialog";
 import { formatIDR } from "@/lib/currency";
 
 export default async function EditProductPage({
@@ -39,6 +40,7 @@ export default async function EditProductPage({
           })),
         }}
       />
+      <DeleteProductDialog productId={product.id} sku={product.sku} />
     </div>
   );
 }
