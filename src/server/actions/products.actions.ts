@@ -28,9 +28,24 @@ export async function updateProductAction(id: string, input: ProductInput) {
   return { id: product.id };
 }
 
-export async function deleteProductAction(id: string) {
+// Returns a structured result rather than throwing, because Next.js redacts
+// thrown server-action error messages in production (the client would only ever
+// see a generic error). This way the specific block reason reaches the UI.
+export type DeleteProductResult =
+  | { ok: true }
+  | { ok: false; reason: "history" | "component" | "unknown" };
+
+export async function deleteProductAction(id: string): Promise<DeleteProductResult> {
   await requireUser();
-  await productsService.deleteProduct(id);
+  try {
+    await productsService.deleteProduct(id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("DELETE_BLOCKED_HISTORY")) return { ok: false, reason: "history" };
+    if (msg.includes("DELETE_BLOCKED_COMPONENT")) return { ok: false, reason: "component" };
+    console.error("deleteProductAction failed", err);
+    return { ok: false, reason: "unknown" };
+  }
   revalidatePath("/products");
   revalidatePath("/journal-entries");
   return { ok: true };

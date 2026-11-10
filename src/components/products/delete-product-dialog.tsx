@@ -39,15 +39,19 @@ export function DeleteProductDialog({
     if (!canDelete) return;
     setIsDeleting(true);
     try {
-      await deleteProductAction(productId);
-      toast.success(t.productDeleted);
-      router.push("/products");
-      router.refresh();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("DELETE_BLOCKED_HISTORY")) toast.error(t.deleteBlockedHistory);
-      else if (msg.includes("DELETE_BLOCKED_COMPONENT")) toast.error(t.deleteBlockedComponent);
+      const res = await deleteProductAction(productId);
+      if (res.ok) {
+        toast.success(t.productDeleted);
+        router.push("/products");
+        router.refresh();
+        return;
+      }
+      if (res.reason === "history") toast.error(t.deleteBlockedHistory);
+      else if (res.reason === "component") toast.error(t.deleteBlockedComponent);
       else toast.error(dict.common.somethingWentWrong);
+    } catch {
+      toast.error(dict.common.somethingWentWrong);
+    } finally {
       setIsDeleting(false);
     }
   }
