@@ -150,12 +150,21 @@ export async function updateProduct(id: string, input: ProductInput) {
 // a product with any purchase/sale/return history is kept (use Inactive), and a
 // part still used in a bike must be detached first. A finished bike's own
 // bill-of-materials rows are cleared as part of the delete.
-export async function deleteProduct(id: string) {
+//
+// If the product still carries stock, that inventory value is sitting in the
+// Inventory ledger (1200). Deleting the product without unwinding it would leave
+// 1200 overstated on the Neraca/Trial Balance with no product behind it, so we
+// post a write-off (Dr Penyesuaian 6890 / Cr Persediaan 1200) in the same
+// transaction. This keeps the ledger balanced and records the loss on the P&L.
+export async function deleteProduct(id: string, createdById?: string) {
   return prisma.$transaction(async (tx) => {
     const product = await tx.product.findUnique({
       where: { id },
       select: {
         id: true,
+        sku: true,
+        quantityOnHand: true,
+        unitCost: true,
         _count: {
           select: {
             purchaseLines: true,
@@ -174,6 +183,32 @@ export async function deleteProduct(id: string) {
     }
     if (usedInBikes > 0) {
       throw new Error("DELETE_BLOCKED_COMPONENT");
+    }
+
+    // Write off any remaining stock value so the Inventory ledger (1200) does not
+    // keep carrying a product that no longer exists.
+    const writeOff = new Prisma.Decimal(product.quantityOnHand).times(product.unitCost);
+    if (!writeOff.isZero() && createdById) {
+      const [inventoryAccount, adjustmentAccount] = await Promise.all([
+        tx.account.findUnique({ where: { code: INVENTORY_ACCOUNT_CODE } }),
+        tx.account.findUnique({ where: { code: ADJUSTMENT_ACCOUNT_CODE } }),
+      ]);
+      if (!inventoryAccount || !adjustmentAccount) {
+        throw new Error("Inventory (1200) or Penyesuaian Persediaan (6890) account is not configured");
+      }
+      await createJournalEntry(
+        {
+          date: new Date(),
+          memo: `Hapus produk ${product.sku}: write-off sisa stok (${product.quantityOnHand})`,
+          sourceType: JournalSourceType.ADJUSTMENT,
+          createdById,
+          lines: [
+            { accountId: adjustmentAccount.id, debit: writeOff.toNumber(), credit: 0 },
+            { accountId: inventoryAccount.id, debit: 0, credit: writeOff.toNumber() },
+          ],
+        },
+        tx
+      );
     }
 
     // Clear this bike's own bill of materials, then remove the product.

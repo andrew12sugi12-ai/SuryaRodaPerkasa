@@ -36,9 +36,9 @@ export type DeleteProductResult =
   | { ok: false; reason: "history" | "component" | "unknown" };
 
 export async function deleteProductAction(id: string): Promise<DeleteProductResult> {
-  await requireUser();
+  const user = await requireUser();
   try {
-    await productsService.deleteProduct(id);
+    await productsService.deleteProduct(id, user.id);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg.includes("DELETE_BLOCKED_HISTORY")) return { ok: false, reason: "history" };
@@ -48,5 +48,8 @@ export async function deleteProductAction(id: string): Promise<DeleteProductResu
   }
   revalidatePath("/products");
   revalidatePath("/journal-entries");
+  revalidatePath("/reports/trial-balance");
+  revalidatePath("/reports/balance-sheet");
+  revalidatePath("/reports/income-statement");
   return { ok: true };
 }
