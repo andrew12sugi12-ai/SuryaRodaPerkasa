@@ -153,9 +153,12 @@ export async function updateProduct(id: string, input: ProductInput) {
 //
 // If the product still carries stock, that inventory value is sitting in the
 // Inventory ledger (1200). Deleting the product without unwinding it would leave
-// 1200 overstated on the Neraca/Trial Balance with no product behind it, so we
-// post a write-off (Dr Penyesuaian 6890 / Cr Persediaan 1200) in the same
-// transaction. This keeps the ledger balanced and records the loss on the P&L.
+// 1200 overstated on the Neraca/Trial Balance with no product behind it. A
+// deletable product never has purchases/sales (those are blocked below), so its
+// stock can only come from opening stock — which was posted Dr Persediaan 1200 /
+// Cr Modal 3000. Deleting is therefore a REVERSAL of that opening entry
+// (Dr Modal 3000 / Cr Persediaan 1200), NOT a business loss: it must not hit the
+// income statement.
 export async function deleteProduct(id: string, createdById?: string) {
   return prisma.$transaction(async (tx) => {
     const product = await tx.product.findUnique({
@@ -185,26 +188,27 @@ export async function deleteProduct(id: string, createdById?: string) {
       throw new Error("DELETE_BLOCKED_COMPONENT");
     }
 
-    // Write off any remaining stock value so the Inventory ledger (1200) does not
-    // keep carrying a product that no longer exists.
-    const writeOff = new Prisma.Decimal(product.quantityOnHand).times(product.unitCost);
-    if (!writeOff.isZero() && createdById) {
-      const [inventoryAccount, adjustmentAccount] = await Promise.all([
+    // Reverse the product's remaining stock value out of Inventory (1200)
+    // against Owner's Equity (3000) — the mirror of the opening-stock entry — so
+    // deleting the product leaves the books balanced WITHOUT booking a P&L loss.
+    const remaining = new Prisma.Decimal(product.quantityOnHand).times(product.unitCost);
+    if (!remaining.isZero() && createdById) {
+      const [inventoryAccount, equityAccount] = await Promise.all([
         tx.account.findUnique({ where: { code: INVENTORY_ACCOUNT_CODE } }),
-        tx.account.findUnique({ where: { code: ADJUSTMENT_ACCOUNT_CODE } }),
+        tx.account.findUnique({ where: { code: OWNERS_EQUITY_ACCOUNT_CODE } }),
       ]);
-      if (!inventoryAccount || !adjustmentAccount) {
-        throw new Error("Inventory (1200) or Penyesuaian Persediaan (6890) account is not configured");
+      if (!inventoryAccount || !equityAccount) {
+        throw new Error("Inventory (1200) or Owner's Equity (3000) account is not configured");
       }
       await createJournalEntry(
         {
           date: new Date(),
-          memo: `Hapus produk ${product.sku}: write-off sisa stok (${product.quantityOnHand})`,
-          sourceType: JournalSourceType.ADJUSTMENT,
+          memo: `Hapus produk ${product.sku}: reversal sisa stok awal (${product.quantityOnHand})`,
+          sourceType: JournalSourceType.MANUAL,
           createdById,
           lines: [
-            { accountId: adjustmentAccount.id, debit: writeOff.toNumber(), credit: 0 },
-            { accountId: inventoryAccount.id, debit: 0, credit: writeOff.toNumber() },
+            { accountId: equityAccount.id, debit: remaining.toNumber(), credit: 0 },
+            { accountId: inventoryAccount.id, debit: 0, credit: remaining.toNumber() },
           ],
         },
         tx
